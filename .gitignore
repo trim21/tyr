@@ -3,4 +3,3 @@
 dist/
 tmp/
 *.exe
-.pre-commit-config.yaml
