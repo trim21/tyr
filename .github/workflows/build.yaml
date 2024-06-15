@@ -1,4 +1,4 @@
-name: docker
+name: build
 
 on:
   push:
@@ -14,6 +14,9 @@ jobs:
     strategy:
       matrix:
         os: [ ubuntu-latest,'windows-latest','macos-latest' ]
+        CGO: [ '0', '1' ]
+    env:
+      CGO_ENABLED: ${{ matrix.CGO }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -22,5 +25,6 @@ jobs:
 
       - run: go get ./...
 
-      - run: go build -tag assert -o /dev/null
-      - run: go build -tag release -o /dev/null
+      - run: go build -o /dev/null
+      - run: go build -tags assert -o /dev/null
+      - run: go build -tags release -o /dev/null
