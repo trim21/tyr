@@ -3,7 +3,7 @@ package jsonrpc
 import (
 	"bytes"
 
-	"github.com/santhosh-tekuri/jsonschema/v2"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 // Validator defines a contract of JSON Schema validator.

@@ -16,7 +16,7 @@ require (
 	github.com/panjf2000/ants/v2 v2.9.1
 	github.com/rs/zerolog v1.33.0
 	github.com/samber/lo v1.39.0
-	github.com/santhosh-tekuri/jsonschema/v2 v2.2.0
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.1
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.9.0
 	github.com/swaggest/assertjson v1.9.0
@@ -98,6 +98,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rs/dnscache v0.0.0-20211102005908-e0241e321417 // indirect
+	github.com/santhosh-tekuri/jsonschema/v2 v2.2.0 // indirect
 	github.com/sergi/go-diff v1.3.1 // indirect
 	github.com/shurcooL/httpgzip v0.0.0-20190720172056-320755c1c1b0 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
