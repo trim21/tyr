@@ -216,7 +216,7 @@ func (d *Download) setAnnounceList(t *metainfo.MetaInfo) {
 
 	for _, tier := range t.UpvertedAnnounceList() {
 		d.trackers = append(d.trackers, lo.Map(tier, func(item string, index int) *Tracker {
-			return &Tracker{url: item}
+			return &Tracker{url: item, nextAnnounce: util.NewValue(time.Now())}
 		}))
 	}
 }
