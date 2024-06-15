@@ -19,7 +19,7 @@ require (
 	github.com/santhosh-tekuri/jsonschema/v2 v2.2.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.8.4
-	github.com/swaggest/assertjson v1.7.0
+	github.com/swaggest/assertjson v1.9.0
 	github.com/swaggest/jsonrpc v0.2.0
 	github.com/swaggest/openapi-go v0.2.20
 	github.com/swaggest/swgui v1.8.1
@@ -65,7 +65,7 @@ require (
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/huandu/xstrings v1.3.2 // indirect
-	github.com/iancoleman/orderedmap v0.2.0 // indirect
+	github.com/iancoleman/orderedmap v0.3.0 // indirect
 	github.com/kelindar/simd v1.1.2 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.4 // indirect
 	github.com/labstack/gommon v0.4.2 // indirect
