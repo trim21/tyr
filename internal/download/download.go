@@ -8,9 +8,8 @@ import (
 	"github.com/samber/lo"
 	"go.uber.org/atomic"
 
-	"ve/internal/peer"
-	"ve/internal/req"
-	"ve/internal/util"
+	"tyr/internal/peer"
+	"tyr/internal/req"
 )
 
 type State uint8
@@ -51,7 +50,7 @@ func New(m *metainfo.MetaInfo, downloadDir string) *Download {
 
 	d := &Download{
 		meta:   *m,
-		peerID: util.NewPeerID(),
+		peerID: peer.NewID(),
 		// already validated
 		info: info,
 		// there maybe 1 uint64 extra data here.

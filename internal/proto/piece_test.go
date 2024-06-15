@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"ve/internal/proto"
+	"tyr/internal/proto"
 )
 
 func TestSendPiece(t *testing.T) {

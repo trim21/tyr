@@ -5,7 +5,7 @@ import (
 	"encoding/binary"
 	"io"
 
-	"ve/internal/proto/size"
+	"tyr/internal/proto/size"
 )
 
 func SendPiece(conn io.Writer, pieceIndex, begin uint32, data []byte) error {

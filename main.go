@@ -11,9 +11,9 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/trim21/errgo"
 
-	"ve/internal/client"
-	"ve/internal/config"
-	"ve/internal/web"
+	"tyr/internal/client"
+	"tyr/internal/config"
+	"tyr/internal/web"
 )
 
 func defaultSessionPath() string {
@@ -31,7 +31,7 @@ func main() {
 	var address = pflag.String("address", "127.0.0.1:8003", "web interface address")
 	var p2pPort = pflag.Uint16("p2p-port", 0, "p2p listen port (default 50047)")
 
-	// this avoid 'pflag: help requested' error when calling for help message.
+	// this avoids 'pflag: help requested' error when calling for help message.
 	if slices.Contains(os.Args[1:], "--help") || slices.Contains(os.Args[1:], "-h") {
 		pflag.Usage()
 		fmt.Println("\nNote: extra options will override config file, but won't change config file.")

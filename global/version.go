@@ -1,6 +1,6 @@
 //go:build !release
 
-package util
+package global
 
 var MAJOR = 0
 var MINOR = 0

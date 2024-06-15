@@ -1,6 +1,6 @@
 package web
 
-import "ve/internal/web/jsonrpc"
+import "tyr/internal/web/jsonrpc"
 
 func CodeError(code jsonrpc.ErrorCode, err error) jsonrpc.ErrWithAppCode {
 	return resError{err, code}

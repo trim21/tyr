@@ -1,22 +1,25 @@
 package web
 
 import (
+	_ "embed"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
-
 	"github.com/swaggest/swgui"
 	"github.com/swaggest/swgui/v5"
 
-	"ve/internal/client"
-	"ve/internal/web/jsonrpc"
+	"tyr/internal/client"
+	"tyr/internal/web/jsonrpc"
 )
+
+//go:embed description.md
+var desc string
 
 func New(c *client.Client) http.Handler {
 	apiSchema := jsonrpc.OpenAPI{}
 	apiSchema.Reflector().SpecEns().Info.Title = "JSON-RPC"
-	apiSchema.Reflector().SpecEns().Info.Version = "v0.0.1"
-	apiSchema.Reflector().SpecEns().Info.WithDescription("JSON API")
+	apiSchema.Reflector().SpecEns().Info.Version = "0.0.1"
+	apiSchema.Reflector().SpecEns().Info.WithDescription(desc)
 
 	h := &jsonrpc.Handler{
 		OpenAPI:              &apiSchema,

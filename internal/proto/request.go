@@ -6,7 +6,7 @@ import (
 
 	"github.com/negrel/assert"
 
-	"ve/internal/req"
+	"tyr/internal/req"
 )
 
 func SendRequest(conn io.Writer, request req.Request) error {

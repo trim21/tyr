@@ -10,10 +10,10 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	"ve/global"
-	"ve/internal/mse"
-	"ve/internal/peer"
-	"ve/internal/proto"
+	"tyr/global"
+	"tyr/internal/mse"
+	"tyr/internal/peer"
+	"tyr/internal/proto"
 )
 
 func main() {

@@ -13,9 +13,9 @@ import (
 
 	"github.com/negrel/assert"
 
-	"ve/internal/proto"
-	"ve/internal/req"
-	"ve/internal/util"
+	"tyr/internal/proto"
+	"tyr/internal/req"
+	"tyr/internal/util"
 )
 
 func New(conn io.ReadWriteCloser, infoHash [20]byte, pieceNum uint32) Peer {
@@ -42,7 +42,7 @@ func (p Peer) bitmapLen() int {
 }
 
 func (p Peer) Handshake() (proto.Handshake, error) {
-	peerID := util.NewPeerID()
+	peerID := NewID()
 	fmt.Printf("current peer id %s\n", peerID)
 	if err := proto.SendHandshake(p.Conn, p.InfoHash, peerID); err != nil {
 		return proto.Handshake{}, err

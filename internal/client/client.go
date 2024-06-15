@@ -9,9 +9,9 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/go-resty/resty/v2"
 
-	"ve/internal/config"
-	"ve/internal/download"
-	"ve/internal/util"
+	"tyr/global"
+	"tyr/internal/config"
+	"tyr/internal/download"
 )
 
 func New(cfg config.Config) *Client {
@@ -27,7 +27,7 @@ func New(cfg config.Config) *Client {
 		// key is info hash raw bytes as string
 		// it's not info hash hex string
 		downloadMap: make(map[string]*download.Download),
-		http:        resty.NewWithClient(hc).SetHeader("User-Agent", util.UserAgent),
+		http:        resty.NewWithClient(hc).SetHeader("User-Agent", global.UserAgent),
 	}
 }
 

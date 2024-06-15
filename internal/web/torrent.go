@@ -10,8 +10,8 @@ import (
 	"github.com/swaggest/usecase"
 	"github.com/trim21/errgo"
 
-	"ve/internal/client"
-	"ve/internal/web/jsonrpc"
+	"tyr/internal/client"
+	"tyr/internal/web/jsonrpc"
 )
 
 type AddTorrentReq struct {

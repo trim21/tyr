@@ -7,7 +7,7 @@ import (
 	"github.com/kelindar/bitmap"
 	"github.com/negrel/assert"
 
-	"ve/internal/util"
+	"tyr/internal/util"
 )
 
 func NewBitfield(conn io.Writer, bm bitmap.Bitmap, piecesLen int) error {

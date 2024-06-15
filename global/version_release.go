@@ -1,6 +1,6 @@
 //go:build release
 
-package util
+package global
 
 import "fmt"
 
