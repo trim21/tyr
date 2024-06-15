@@ -7,8 +7,8 @@ tasks:
     sources:
       - go.mod
       - go.sum
-      - '**/*.go'
-      - 'internal/web/static/**/*'
+      - "**/*.go"
+      - "internal/web/static/**/*"
     cmd: go build -tags release -o dist/tyr.exe main.go
 
   build:dev:
@@ -17,8 +17,8 @@ tasks:
     sources:
       - go.mod
       - go.sum
-      - '**/*.go'
-      - '**/*.json'
+      - "**/*.go"
+      - "**/*.json"
     cmd: go build -tags assert -o tmp/tmp.exe main.go
 
   dev:

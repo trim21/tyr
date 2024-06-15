@@ -59,4 +59,3 @@ issues:
     - linters:
         - errcheck # Error checking omitted for brevity.
       path: "example_"
-

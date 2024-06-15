@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/alecthomas/atomic"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/go-resty/resty/v2"
 	"github.com/rs/zerolog/log"
@@ -205,7 +204,7 @@ type Tracker struct {
 	lastAnnounce     bool
 	lastAnnounceTime time.Time
 	interval         time.Duration
-	nextAnnounce     atomic.Value[time.Time]
+	nextAnnounce     util.ValueOf[time.Time]
 	isBackup         bool
 	err              error
 }

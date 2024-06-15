@@ -29,7 +29,7 @@ func TestOpenAPI_Collect(t *testing.T) {
 		Len int `json:"len"`
 	}
 
-	u := usecase.NewIOI(new(inp), new(out), func(ctx context.Context, input, output interface{}) error {
+	u := usecase.NewIOI(new(inp), new(out), func(ctx context.Context, input, output any) error {
 		output.(*out).Len = len(input.(*inp).Name)
 
 		return nil

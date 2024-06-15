@@ -21,8 +21,8 @@ func (re ValidationErrors) Error() string {
 }
 
 // Fields returns request errors by field location and name.
-func (re ValidationErrors) Fields() map[string]interface{} {
-	res := make(map[string]interface{}, len(re))
+func (re ValidationErrors) Fields() map[string]any {
+	res := make(map[string]any, len(re))
 
 	for k, v := range re {
 		sort.Strings(v)

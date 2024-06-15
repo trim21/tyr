@@ -20,7 +20,7 @@ func TestHandler_Add(t *testing.T) {
 	h.OpenAPI = &jsonrpc.OpenAPI{}
 	h.Validator = &jsonrpc.JSONSchemaValidator{}
 	h.Middlewares = append(h.Middlewares, usecase.MiddlewareFunc(func(next usecase.Interactor) usecase.Interactor {
-		return usecase.Interact(func(ctx context.Context, input, output interface{}) error {
+		return usecase.Interact(func(ctx context.Context, input, output any) error {
 			cnt++
 
 			return next.Interact(ctx, input, output)
@@ -37,7 +37,7 @@ func TestHandler_Add(t *testing.T) {
 		B int    `json:"b" maximum:"10"`
 	}
 
-	u := usecase.NewIOI(new(inp), new(outp), func(ctx context.Context, input, output interface{}) error {
+	u := usecase.NewIOI(new(inp), new(outp), func(ctx context.Context, input, output any) error {
 		in, ok := input.(*inp)
 		assert.True(t, ok)
 

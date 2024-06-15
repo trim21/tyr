@@ -99,7 +99,7 @@ func (h *Handler) Add(u usecase.Interactor) {
 		panic("use case name is required")
 	}
 
-	var fu usecase.Interactor = usecase.Interact(func(ctx context.Context, input, output interface{}) error {
+	var fu usecase.Interactor = usecase.Interact(func(ctx context.Context, input, output any) error {
 		return ctx.Value(errCtxKey{}).(error)
 	})
 
@@ -128,7 +128,7 @@ type Request struct {
 	JSONRPC string          `json:"jsonrpc"`
 	Method  string          `json:"method"`
 	Params  json.RawMessage `json:"params"`
-	ID      *interface{}    `json:"id,omitempty"`
+	ID      *any            `json:"id,omitempty"`
 }
 
 // Response is an JSON-RPC response item.
@@ -136,14 +136,14 @@ type Response struct {
 	JSONRPC string          `json:"jsonrpc"`
 	Result  json.RawMessage `json:"result,omitempty"`
 	Error   *Error          `json:"error,omitempty"`
-	ID      *interface{}    `json:"id"`
+	ID      *any            `json:"id"`
 }
 
 // Error describes JSON-RPC error structure.
 type Error struct {
-	Code    ErrorCode   `json:"code"`
-	Message string      `json:"message"`
-	Data    interface{} `json:"data,omitempty"`
+	Code    ErrorCode `json:"code"`
+	Message string    `json:"message"`
+	Data    any       `json:"data,omitempty"`
 }
 
 var errEmptyBody = errors.New("empty body")
@@ -266,12 +266,12 @@ func (h *Handler) serveBatch(ctx context.Context, w http.ResponseWriter, reqBody
 }
 
 type structuredErrorData struct {
-	Error   string                 `json:"error"`
-	Context map[string]interface{} `json:"context"`
+	Error   string         `json:"error"`
+	Context map[string]any `json:"context"`
 }
 
 func (h *Handler) invoke(ctx context.Context, req Request, resp *Response) {
-	var input, output interface{}
+	var input, output any
 
 	m, found := h.methods[req.Method]
 	if !found {
@@ -309,7 +309,7 @@ func (h *Handler) invoke(ctx context.Context, req Request, resp *Response) {
 	h.encode(ctx, m, req, resp, output)
 }
 
-func (h *Handler) encode(ctx context.Context, m method, req Request, resp *Response, output interface{}) {
+func (h *Handler) encode(ctx context.Context, m method, req Request, resp *Response, output any) {
 	data, err := json.Marshal(output)
 	if err != nil {
 		resp.Error = &Error{
@@ -335,7 +335,7 @@ func (h *Handler) encode(ctx context.Context, m method, req Request, resp *Respo
 	resp.Result = data
 }
 
-func (h *Handler) decode(ctx context.Context, m method, req Request, resp *Response, input interface{}) bool {
+func (h *Handler) decode(ctx context.Context, m method, req Request, resp *Response, input any) bool {
 	if err := json.Unmarshal(req.Params, input); err != nil {
 		if m.failingUseCase != nil {
 			err = m.failingUseCase.Interact(context.WithValue(ctx, errCtxKey{}, err), nil, nil)
