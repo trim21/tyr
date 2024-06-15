@@ -7,7 +7,7 @@ toolchain go1.22.0
 require (
 	github.com/BurntSushi/toml v1.4.0
 	github.com/anacrolix/torrent v1.56.0
-	github.com/bool64/dev v0.2.32
+	github.com/bool64/dev v0.2.34
 	github.com/dchest/uniuri v1.2.0
 	github.com/go-resty/resty/v2 v2.13.1
 	github.com/kelindar/bitmap v1.5.2
@@ -19,9 +19,9 @@ require (
 	github.com/santhosh-tekuri/jsonschema/v2 v2.2.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.8.4
-	github.com/swaggest/assertjson v1.7.0
+	github.com/swaggest/assertjson v1.9.0
 	github.com/swaggest/jsonrpc v0.2.0
-	github.com/swaggest/openapi-go v0.2.20
+	github.com/swaggest/openapi-go v0.2.51
 	github.com/swaggest/swgui v1.8.1
 	github.com/swaggest/usecase v1.3.1
 	github.com/trim21/errgo v0.0.2
@@ -65,7 +65,7 @@ require (
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/huandu/xstrings v1.3.2 // indirect
-	github.com/iancoleman/orderedmap v0.2.0 // indirect
+	github.com/iancoleman/orderedmap v0.3.0 // indirect
 	github.com/kelindar/simd v1.1.2 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.4 // indirect
 	github.com/labstack/gommon v0.4.2 // indirect
@@ -98,11 +98,11 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rs/dnscache v0.0.0-20211102005908-e0241e321417 // indirect
-	github.com/sergi/go-diff v1.2.0 // indirect
+	github.com/sergi/go-diff v1.3.1 // indirect
 	github.com/shurcooL/httpgzip v0.0.0-20190720172056-320755c1c1b0 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
-	github.com/swaggest/jsonschema-go v0.3.37 // indirect
-	github.com/swaggest/refl v1.1.0 // indirect
+	github.com/swaggest/jsonschema-go v0.3.70 // indirect
+	github.com/swaggest/refl v1.3.0 // indirect
 	github.com/tidwall/btree v1.6.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
