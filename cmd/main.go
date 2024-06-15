@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"ve/global"
+	"ve/internal/mse"
 	"ve/internal/peer"
 	"ve/internal/proto"
 )
@@ -22,21 +24,16 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	//utp.ListenUTP()
-
-	//s, err := utp.NewSocket("udp", ":47587")
-	//if err != nil {
-	//	panic(err)
-	//}
-	//conn, err := s.Dial("192.168.1.3:50025")
-	//conn, err := utp.Dial("utp4", "82.64.55.92:48369")
-	//conn, err := net.Dial("tcp", "82.64.55.92:48369")
 	conn, err := global.Dialer.DialContext(ctx, "tcp4", "192.168.1.3:50025")
 	if err != nil {
 		panic(err)
 	}
 
-	p := peer.New(conn, [20]byte(infoHash), 10510)
+	rw, err := mse.NewConnection(infoHash, conn)
+	if err != nil {
+		panic(err)
+	}
+	p := peer.New(rw, [20]byte(infoHash), 10510)
 	h, err := p.Handshake()
 	if err != nil {
 		panic(err)
@@ -62,6 +59,11 @@ func main() {
 				return
 			}
 			event, err := p.DecodeEvents()
+			if errors.Is(err, peer.ErrPeerSendInvalidData) {
+				_ = p.Conn.Close()
+				cancel()
+				return
+			}
 			if err != nil {
 				panic(err)
 			}
@@ -80,6 +82,9 @@ func main() {
 		defer wg.Done()
 		for {
 			time.Sleep(time.Minute)
+			if ctx.Err() != nil {
+				return
+			}
 			p.M.Lock()
 			log.Trace().Msg("keep alive")
 			if err := proto.SendKeepAlive(p.Conn); err != nil {

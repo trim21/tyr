@@ -1,0 +1,39 @@
+version: 3
+
+tasks:
+  build:
+    generates:
+      - dist/ve.exe
+    sources:
+      - go.mod
+      - go.sum
+      - '**/*.go'
+      - 'internal/web/static/**/*'
+    cmd: go build -tags release -o dist/ve.exe main.go
+
+  build:dev:
+    generates:
+      - tmp/tmp.exe
+    sources:
+      - go.mod
+      - go.sum
+      - '**/*.go'
+    cmd: go build -tags assert -o tmp/tmp.exe main.go
+
+  dev:
+    watch: true
+    deps:
+      - build:dev
+    cmds:
+      - cp tmp/tmp.exe tmp/server.exe
+      - ./tmp/server.exe --address 127.0.0.1:8002 --config-file ./config.toml
+
+  dev:release:
+    watch: true
+    deps:
+      - build
+    cmds:
+      - cp dist/ve.exe tmp/server.exe
+      - ./tmp/server.exe --address 127.0.0.1:8002 --config-file ./config.toml
+
+  lint: golangci-lint run

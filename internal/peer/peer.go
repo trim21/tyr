@@ -2,30 +2,35 @@ package peer
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
-	"net"
 	"sync"
 
+	"github.com/anacrolix/torrent"
 	"github.com/kelindar/bitmap"
 	"github.com/rs/zerolog/log"
 
 	"github.com/negrel/assert"
 
 	"ve/internal/proto"
+	"ve/internal/req"
 	"ve/internal/util"
 )
 
-func New(conn net.Conn, infoHash [20]byte, pieceNum uint32) Peer {
+func New(conn io.ReadWriteCloser, infoHash [20]byte, pieceNum uint32) Peer {
 	return Peer{Conn: conn, InfoHash: infoHash, PieceNum: pieceNum, M: &sync.Mutex{}}
 }
 
+var ErrPeerSendInvalidData = errors.New("peer send invalid data")
+
 type Peer struct {
-	Conn     net.Conn
+	Conn     io.ReadWriteCloser
 	M        *sync.Mutex
-	PieceNum uint32
-	InfoHash [20]byte
 	Bitmap   bitmap.Bitmap
+	requests req.Request
+	InfoHash torrent.InfoHash
+	PieceNum uint32
 }
 
 func (p Peer) bitmapLen() int {
@@ -47,9 +52,8 @@ func (p Peer) Handshake() (proto.Handshake, error) {
 }
 
 type Event struct {
-	Event proto.Message
-
 	Bitmap bitmap.Bitmap
+	Event  proto.Message
 }
 
 func (p Peer) DecodeEvents() (Event, error) {
@@ -89,7 +93,9 @@ func (p Peer) DecodeEvents() (Event, error) {
 }
 
 func (p Peer) decodeBitfield(l uint32) (Event, error) {
-	// TODO: verify bitfield length with torrent data
+	if int(l) != p.bitmapLen() {
+		return Event{}, ErrPeerSendInvalidData
+	}
 
 	var b = make([]byte, l-1)
 	n, err := p.Conn.Read(b)
