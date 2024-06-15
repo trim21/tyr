@@ -8,6 +8,10 @@ import (
 
 type ID [20]byte
 
+func (i ID) AsString() string {
+	return string(i[:])
+}
+
 var peerIDChars = []byte("0123456789abcdefghijklmnopqrstuvwxyz" +
 	"ABCDEFGHIJKLMNOPQRSTUVWXYZ!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~")
 

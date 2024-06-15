@@ -8,6 +8,7 @@ import (
 
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/go-resty/resty/v2"
+	"golang.org/x/sync/semaphore"
 
 	"tyr/global"
 	"tyr/internal/config"
@@ -26,6 +27,7 @@ func New(cfg config.Config) *Client {
 		Config: cfg,
 		// key is info hash raw bytes as string
 		// it's not info hash hex string
+		sem:         semaphore.NewWeighted(int64(cfg.App.PeersLimit)),
 		downloadMap: make(map[string]*download.Download),
 		http:        resty.NewWithClient(hc).SetHeader("User-Agent", global.UserAgent),
 	}
@@ -37,6 +39,7 @@ type Client struct {
 	downloadMap map[string]*download.Download
 	Config      config.Config
 	m           sync.RWMutex
+	sem         *semaphore.Weighted
 }
 
 func (c *Client) AddTorrent(m *metainfo.MetaInfo, downloadPath string) error {

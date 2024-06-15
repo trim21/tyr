@@ -9,10 +9,11 @@ import (
 )
 
 type Application struct {
-	DownloadDir     string `json:"download_dir"`
-	MaxHTTPParallel int    `json:"max_http_parallel"`
-	P2PPort         uint16 `json:"p2p_port"`
-	NumWant         uint16 `json:"num_want"`
+	DownloadDir     string `json:"download-dir"`
+	MaxHTTPParallel int    `json:"max-http-parallel"`
+	P2PPort         uint16 `json:"p2p-port"`
+	NumWant         uint16 `json:"num-want"`
+	PeersLimit      uint16 `json:"peers-limit"`
 }
 
 type Config struct {

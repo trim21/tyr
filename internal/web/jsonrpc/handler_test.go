@@ -58,7 +58,7 @@ func TestHandler_Add(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
-	assert.Equal(t, `{"jsonrpc":"2.0","result":{"b":5,"a":"abc"},"id":1}`, w.Body.String())
+	assert.JSONEq(t, `{"jsonrpc":"2.0","result":{"b":5,"a":"abc"},"id":1}`, w.Body.String())
 	assert.Equal(t, 1, cnt)
 
 	req, err = http.NewRequest(http.MethodPost, "/", bytes.NewReader([]byte(`{"jsonrpc":"2.0","method":"echo","params":{"a":"abc","b":"invalid"},"id":1}`)))

@@ -1,6 +1,7 @@
 package download
 
 import (
+	"net/netip"
 	"sync"
 	stdSync "sync/atomic"
 
@@ -21,9 +22,13 @@ const Stopped State = 1
 const Uploading State = 2
 
 type Download struct {
-	meta       metainfo.MetaInfo
-	info       metainfo.Info
-	infoHash   metainfo.Hash
+	m sync.Mutex
+
+	meta        metainfo.MetaInfo
+	info        metainfo.Info
+	infoHash    metainfo.Hash
+	totalLength int64
+
 	bm         bitmap.Bitmap
 	downloaded atomic.Int64
 	uploaded   atomic.Int64
@@ -31,22 +36,31 @@ type Download struct {
 
 	peerID peer.ID
 
-	uploadAtStart   atomic.Int64
-	downloadAtStart atomic.Int64
+	uploadAtStart   int64
+	downloadAtStart int64
 
 	resChan chan req.Response
 
 	announcePending stdSync.Bool
 
-	m           sync.Mutex
+	key string
+
 	downloadDir string
 	state       uint8
 	private     bool
 	trackers    []TrackerTier
-	peers       []peer.Peer
+	connections []peer.Peer
+	// announce response
+	peers       []netip.AddrPort
 	trackerTier int
 	// if this torrent is initialized
 	lazyInitialized atomic.Bool
+	err             error
+}
+
+// TODO global peers limit
+func (d *Download) connectToPeers() {
+
 }
 
 func New(m *metainfo.MetaInfo, downloadDir string) *Download {
@@ -63,6 +77,7 @@ func New(m *metainfo.MetaInfo, downloadDir string) *Download {
 		// already validated
 		info:     info,
 		infoHash: m.HashInfoBytes(),
+		//key:
 		// there maybe 1 uint64 extra data here.
 		bm:          make(bitmap.Bitmap, info.PieceLength/8+8),
 		private:     private,

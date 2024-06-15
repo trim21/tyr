@@ -2,6 +2,8 @@ package util
 
 import "github.com/kelindar/bitmap"
 
+type StrMap = map[string]string
+
 func BitmapFromChunked(b []byte) bitmap.Bitmap {
 	bmLen := len(b)
 
