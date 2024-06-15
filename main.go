@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"slices"
 
+	"github.com/anacrolix/torrent/metainfo"
+	"github.com/samber/lo"
 	"github.com/spf13/pflag"
 	"github.com/trim21/errgo"
 
@@ -62,6 +64,8 @@ func main() {
 	}
 
 	app := client.New(cfg)
+
+	lo.Must0(app.AddTorrent(lo.Must(metainfo.LoadFromFile(`C:\Users\Trim21\Downloads\ubuntu-24.04-desktop-amd64.iso.torrent`)), "C:\\Users\\Trim21\\Downloads"))
 
 	go app.Start()
 

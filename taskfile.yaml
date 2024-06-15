@@ -9,7 +9,7 @@ tasks:
       - go.sum
       - '**/*.go'
       - 'internal/web/static/**/*'
-    cmd: go build -tags release -o dist/ve.exe main.go
+    cmd: go build -tags release -o dist/tyr.exe main.go
 
   build:dev:
     generates:
@@ -34,7 +34,7 @@ tasks:
     deps:
       - build
     cmds:
-      - cp dist/ve.exe tmp/server.exe
+      - cp dist/tyr.exe tmp/server.exe
       - ./tmp/server.exe --address 127.0.0.1:8002 --config-file ./config.toml
 
   lint: golangci-lint run

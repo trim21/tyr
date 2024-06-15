@@ -13,6 +13,7 @@ require (
 	github.com/kelindar/bitmap v1.5.2
 	github.com/labstack/echo/v4 v4.12.0
 	github.com/negrel/assert v0.2.0
+	github.com/panjf2000/ants/v2 v2.9.1
 	github.com/rs/zerolog v1.33.0
 	github.com/samber/lo v1.39.0
 	github.com/santhosh-tekuri/jsonschema/v2 v2.2.0

@@ -1,15 +1,33 @@
 package download
 
 import (
+	"time"
+
 	"github.com/anacrolix/torrent/metainfo"
+	"github.com/rs/zerolog/log"
 	"github.com/samber/lo"
 )
 
 type AnnounceResult struct {
 }
 
-func (d *Download) Announce() (AnnounceResult, error) {
-	return d.trackers[d.trackerTier].Announce(d)
+func (d *Download) CouldAnnounce() bool {
+	// check announce interval
+	if d.announcePending.Load() {
+		return false
+	}
+	return true
+}
+
+func (d *Download) AsyncAnnounce() {
+	d.announcePending.Store(true)
+	defer d.announcePending.Store(false)
+
+	log.Trace().Hex("info_hash", d.infoHash.Bytes()).Msg("announce")
+	for _, tier := range d.trackers {
+		tier.Announce(d)
+	}
+	time.Sleep(time.Second * 10)
 }
 
 type TrackerTier []*Tracker

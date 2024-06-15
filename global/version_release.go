@@ -8,5 +8,4 @@ var MAJOR = 0
 var MINOR = 0
 var PATCH = 0
 
-var UserAgent = fmt.Sprintf("VE/%d.%d.%d", MAJOR, MINOR, PATCH)
-var peerIDPrefix = fmt.Sprintf("-VE%x%x%x0-", MAJOR, MINOR, PATCH)
+var UserAgent = fmt.Sprintf("Tyr/%d.%d.%d (https://github.com/trim21/tyr)", MAJOR, MINOR, PATCH)

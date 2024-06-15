@@ -39,10 +39,6 @@ type Client struct {
 	m           sync.RWMutex
 }
 
-func (c *Client) Start() {
-
-}
-
 func (c *Client) AddTorrent(m *metainfo.MetaInfo, downloadPath string) error {
 	c.m.RLock()
 	infoHash := m.HashInfoBytes()
