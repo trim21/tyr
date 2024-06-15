@@ -1,8 +1,6 @@
 package jsonrpc
 
-import (
-	"sort"
-)
+import "sort"
 
 // ErrWithAppCode exposes application error code.
 type ErrWithAppCode interface {

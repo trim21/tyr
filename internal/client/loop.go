@@ -18,6 +18,6 @@ func (c *Client) Start() {
 				d.AsyncAnnounce()
 			}
 		}
-		c.m.RLock()
+		c.m.RUnlock()
 	}
 }

@@ -2,8 +2,12 @@ package jsonrpc
 
 import (
 	"bytes"
+	"fmt"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/santhosh-tekuri/jsonschema/v6"
+
+	"tyr/global"
 )
 
 // Validator defines a contract of JSON Schema validator.
@@ -24,12 +28,22 @@ type JSONSchemaValidator struct {
 func (jv *JSONSchemaValidator) addSchema(method string, isParams bool, jsonSchema []byte) error {
 	compiler := jsonschema.NewCompiler()
 
-	err := compiler.AddResource("schema.json", bytes.NewBuffer(jsonSchema))
+	s, err := jsonschema.UnmarshalJSON(bytes.NewReader(jsonSchema))
 	if err != nil {
 		return err
 	}
 
-	schema, err := compiler.Compile("schema.json")
+	name := fmt.Sprintf("urn:x-tyr:%s:schema:%s:result", global.Version, method)
+	if isParams {
+		name = fmt.Sprintf("urn:x-tyr:%s:schema:%s:params", global.Version, method)
+	}
+
+	err = compiler.AddResource(name, s)
+	if err != nil {
+		return err
+	}
+
+	schema, err := compiler.Compile(name)
 	if err != nil {
 		return err
 	}
@@ -86,7 +100,12 @@ func (jv *JSONSchemaValidator) validate(method string, isParams bool, jsonBody [
 		return nil
 	}
 
-	err := schema.Validate(bytes.NewReader(jsonBody))
+	inst, err := jsonschema.UnmarshalJSON(bytes.NewReader(jsonBody))
+	if err != nil {
+		return err
+	}
+
+	err = schema.Validate(inst)
 	if err == nil {
 		return nil
 	}
@@ -95,19 +114,12 @@ func (jv *JSONSchemaValidator) validate(method string, isParams bool, jsonBody [
 
 	//nolint:errorlint // Error is not wrapped, type assertion is more performant.
 	if ve, ok := err.(*jsonschema.ValidationError); ok {
-		errs[name] = appendError(errs[name], ve)
+		errs[name] = []string{ve.Error()}
 	} else {
 		errs[name] = append(errs[name], err.Error())
 	}
 
+	spew.Dump(errs.Fields())
+
 	return errs
-}
-
-func appendError(errorMessages []string, err *jsonschema.ValidationError) []string {
-	errorMessages = append(errorMessages, err.InstancePtr+": "+err.Message)
-	for _, ec := range err.Causes {
-		errorMessages = appendError(errorMessages, ec)
-	}
-
-	return errorMessages
 }

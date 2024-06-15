@@ -367,14 +367,17 @@ func (h *Handler) errResp(resp *Response, msg string, code ErrorCode, err error)
 		Message: msg,
 	}
 
+	var e ValidationErrors
+	if errors.As(err, &e) {
+		resp.Error.Data = e.Fields()
+	}
+
 	//goland:noinspection GoTypeAssertionOnErrors
 	if e, ok := err.(ErrWithAppCode); ok {
 		resp.Error.Code = e.AppErrCode()
 		resp.Error.Message = err.Error()
 		return
 	}
-
-	resp.Error.Data = err.Error()
 }
 
 func (h *Handler) fail(w http.ResponseWriter, err error, code ErrorCode) {
