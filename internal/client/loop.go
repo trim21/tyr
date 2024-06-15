@@ -15,9 +15,9 @@ func (c *Client) Start() {
 		c.m.RLock()
 		for _, d := range c.downloads {
 			if d.CouldAnnounce() {
-				d.AsyncAnnounce()
+				d.AsyncAnnounce(c.http)
 			}
 		}
-		c.m.RLock()
+		c.m.RUnlock()
 	}
 }

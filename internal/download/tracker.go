@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/anacrolix/torrent/metainfo"
+	"github.com/go-resty/resty/v2"
 	"github.com/rs/zerolog/log"
 	"github.com/samber/lo"
 )
@@ -19,7 +20,7 @@ func (d *Download) CouldAnnounce() bool {
 	return true
 }
 
-func (d *Download) AsyncAnnounce() {
+func (d *Download) AsyncAnnounce(http *resty.Client) {
 	d.announcePending.Store(true)
 	defer d.announcePending.Store(false)
 

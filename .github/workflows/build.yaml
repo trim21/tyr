@@ -18,6 +18,7 @@ jobs:
         CGO: [ '0', '1' ]
     env:
       CGO_ENABLED: ${{ matrix.CGO }}
+      GOTOOLCHAIN: local
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
