@@ -14,6 +14,7 @@ import (
 	"github.com/samber/lo"
 	"github.com/spf13/pflag"
 	"github.com/trim21/errgo"
+	_ "go.uber.org/automaxprocs"
 
 	"tyr/internal/client"
 	"tyr/internal/config"
