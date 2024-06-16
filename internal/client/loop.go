@@ -32,3 +32,7 @@ func (c *Client) Start() {
 		c.m.RUnlock()
 	}
 }
+
+func (c *Client) Shutdown() {
+
+}

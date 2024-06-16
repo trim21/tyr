@@ -25,11 +25,7 @@ func LoadFromFile(path string) (Config, error) {
 		App: Application{MaxHTTPParallel: 100, PeersLimit: 50},
 	}
 
-	if _, err := toml.DecodeFile(path, &cfg); err != nil {
-		if os.IsNotExist(err) {
-			panic(errgo.Wrap(err, "please provide a config file"))
-		}
-
+	if _, err := toml.DecodeFile(path, &cfg); err != nil && !os.IsNotExist(err) {
 		return cfg, errgo.Wrap(err, "failed to parse config file")
 	}
 
