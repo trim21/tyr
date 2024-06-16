@@ -19,7 +19,7 @@ tasks:
       - go.sum
       - "**/*.go"
       - "**/*.json"
-    cmd: go build -tags assert -o tmp/tmp.exe main.go
+    cmd: go build -race -tags assert -o tmp/tmp.exe main.go
 
   dev:
     watch: true

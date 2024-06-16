@@ -31,6 +31,7 @@ require (
 	github.com/zeebo/bencode v1.0.0
 	go.uber.org/atomic v1.11.0
 	go.uber.org/automaxprocs v1.5.3
+	golang.org/x/exp v0.0.0-20240506185415-9bf2ced13842
 	golang.org/x/sync v0.7.0
 	golang.org/x/tools v0.22.0
 )
@@ -133,7 +134,6 @@ require (
 	go.opentelemetry.io/otel/trace v1.24.0 // indirect
 	go.uber.org/multierr v1.9.0 // indirect
 	golang.org/x/crypto v0.24.0 // indirect
-	golang.org/x/exp v0.0.0-20240506185415-9bf2ced13842 // indirect
 	golang.org/x/mod v0.18.0 // indirect
 	golang.org/x/net v0.26.0 // indirect
 	golang.org/x/sys v0.21.0 // indirect

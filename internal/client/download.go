@@ -54,7 +54,7 @@ type Download struct {
 	key string
 
 	downloadDir string
-	state       uint8
+	state       State
 	private     bool
 	trackers    []TrackerTier
 	// announce response
@@ -71,6 +71,21 @@ type Download struct {
 	// if this torrent is initialized
 	lazyInitialized atomic.Bool
 	err             error
+}
+
+func (d *Download) Start() {
+	d.m.Lock()
+	if d.done.Load() {
+		d.state = Uploading
+	} else {
+		d.state = Downloading
+	}
+	d.m.Unlock()
+}
+func (d *Download) Stop() {
+	d.m.Lock()
+	d.state = Stopped
+	d.m.Unlock()
 }
 
 func (d *Download) cleanDeadPeers() {

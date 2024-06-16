@@ -14,6 +14,8 @@ type Application struct {
 	P2PPort         uint16 `json:"p2p-port"`
 	NumWant         uint16 `json:"num-want"`
 	PeersLimit      uint16 `json:"peers-limit"`
+
+	Crypto string `json:"crypto"`
 }
 
 type Config struct {
