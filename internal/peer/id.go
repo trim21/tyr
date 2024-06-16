@@ -3,7 +3,7 @@ package peer
 import (
 	"github.com/dchest/uniuri"
 
-	"tyr/global"
+	"tyr/internal/pkg/global"
 )
 
 type ID [20]byte
