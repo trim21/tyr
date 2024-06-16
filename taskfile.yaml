@@ -25,9 +25,11 @@ tasks:
     watch: true
     deps:
       - build:dev
+    dotenv:
+      - .env
     cmds:
       - cp tmp/tmp.exe tmp/server.exe
-      - ./tmp/server.exe --address 127.0.0.1:8002 --config-file ./config.toml
+      - ./tmp/server.exe --web 127.0.0.1:8002 --config-file ./config.toml
 
   dev:release:
     watch: true
@@ -35,6 +37,6 @@ tasks:
       - build
     cmds:
       - cp dist/tyr.exe tmp/server.exe
-      - ./tmp/server.exe --address 127.0.0.1:8002 --config-file ./config.toml
+      - ./tmp/server.exe --web 127.0.0.1:8002 --config-file ./config.toml
 
   lint: golangci-lint run

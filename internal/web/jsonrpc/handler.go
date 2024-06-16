@@ -128,7 +128,7 @@ type Request struct {
 	JSONRPC string          `json:"jsonrpc"`
 	Method  string          `json:"method"`
 	Params  json.RawMessage `json:"params"`
-	ID      *any            `json:"id,omitempty"`
+	ID      json.RawMessage `json:"id,omitempty"`
 }
 
 // Response is an JSON-RPC response item.
@@ -136,7 +136,7 @@ type Response struct {
 	JSONRPC string          `json:"jsonrpc"`
 	Result  json.RawMessage `json:"result,omitempty"`
 	Error   *Error          `json:"error,omitempty"`
-	ID      *any            `json:"id"`
+	ID      json.RawMessage `json:"id"`
 }
 
 // Error describes JSON-RPC error structure.

@@ -31,9 +31,7 @@ func (d *Download) CouldAnnounce() bool {
 
 func (d *Download) AsyncAnnounce(http *resty.Client) {
 	d.asyncAnnounce(http)
-	if !d.done.Load() {
-		d.connectToPeers()
-	}
+	d.connectToPeers()
 }
 
 func (d *Download) asyncAnnounce(http *resty.Client) {
@@ -50,13 +48,12 @@ func (d *Download) asyncAnnounce(http *resty.Client) {
 			return
 		}
 		if len(r.Peers) != 0 {
-			d.m.Lock()
+			d.peersMutex.Lock()
 			d.peers = append(d.peers, r.Peers...)
 			d.peers = lo.UniqBy(d.peers, func(item netip.AddrPort) string {
 				return item.String()
 			})
-
-			d.m.Unlock()
+			d.peersMutex.Unlock()
 		}
 	}
 }
@@ -79,7 +76,6 @@ func (tier TrackerTier) Announce(d *Download, http *resty.Client) (AnnounceResul
 			"peer_id":    d.peerID.AsString(),
 			"port":       "47864",
 			"compat":     "1",
-			"numwant":    "200",
 			"uploaded":   strconv.FormatInt(d.uploaded.Load()-d.uploadAtStart, 10),
 			"downloaded": strconv.FormatInt(d.downloaded.Load()-d.downloadAtStart, 10),
 			"left":       strconv.FormatInt(d.totalLength-d.completed.Load(), 10),

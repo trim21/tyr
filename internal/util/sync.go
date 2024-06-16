@@ -2,7 +2,6 @@ package util
 
 import (
 	"sync/atomic"
-	"time"
 )
 
 func NewValue[T any](value T) ValueOf[T] {
@@ -15,10 +14,10 @@ type ValueOf[T any] struct {
 	v atomic.Value
 }
 
-func (v *ValueOf[T]) Load() time.Time {
-	return v.v.Load().(time.Time)
+func (v *ValueOf[T]) Load() T {
+	return v.v.Load().(T)
 }
 
-func (v *ValueOf[T]) Store(value time.Time) {
+func (v *ValueOf[T]) Store(value T) {
 	v.v.Store(value)
 }

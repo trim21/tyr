@@ -5,9 +5,11 @@ import (
 	"net/netip"
 	"sync"
 	stdSync "sync/atomic"
+	"time"
 
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/kelindar/bitmap"
+	"github.com/puzpuzpuz/xsync/v3"
 	"github.com/rs/zerolog/log"
 	"github.com/samber/lo"
 	"go.uber.org/atomic"
@@ -55,9 +57,16 @@ type Download struct {
 	state       uint8
 	private     bool
 	trackers    []TrackerTier
-	connections []*peer.Peer
 	// announce response
-	peers       []netip.AddrPort
+
+	peersMutex sync.RWMutex
+	peers      []netip.AddrPort
+
+	connMutex sync.RWMutex
+	conn      *xsync.MapOf[string, *peer.Peer]
+
+	connectionHistory *xsync.MapOf[string, connHistory]
+
 	trackerTier int
 	// if this torrent is initialized
 	lazyInitialized atomic.Bool
@@ -65,48 +74,60 @@ type Download struct {
 }
 
 func (d *Download) cleanDeadPeers() {
-	d.m.Lock()
-	before := len(d.connections)
-	d.connections = lo.Filter(d.connections, func(item *peer.Peer, index int) bool {
-		return !item.Dead()
+	d.conn.Range(func(key string, value *peer.Peer) bool {
+		if value.Dead() {
+			d.conn.Delete(key)
+			d.c.sem.Release(1)
+		}
+		return true
 	})
-	after := len(d.connections)
-	d.m.Unlock()
-
-	d.c.sem.Release(int64(after - before))
 }
 
 func (d *Download) connectToPeers() {
-	log.Trace().Msg("connectToPeers")
 	d.cleanDeadPeers()
+
+	d.peersMutex.RLock()
+	if len(d.peers) > 0 {
+		log.Trace().Msg("connectToPeers")
+	}
 
 	for _, p := range d.peers {
 		a := p.String()
 		log.Trace().Msgf("check peer %s", a)
-		d.m.RLock()
-		connected := lo.ContainsBy(d.connections, func(item *peer.Peer) bool {
-			return item.Address == a
-		})
-		d.m.RUnlock()
+		_, connected := d.conn.Load(a)
 
 		if connected {
 			log.Trace().Msgf("peer connected")
 			continue
 		}
 
+		h, ok := d.connectionHistory.Load(a)
+		if ok {
+			if h.lastTry.After(time.Now().Add(-time.Minute)) {
+				continue
+			}
+		}
+
 		if !d.c.sem.TryAcquire(1) {
-			return
+			break
 		}
 
 		conn, err := global.Dialer.Dial("tcp", a)
 		if err != nil {
+			d.connectionHistory.Store(a, connHistory{lastTry: time.Now()})
 			continue
 		}
+		d.connectionHistory.Store(a, connHistory{lastTry: time.Now(), connected: true})
+
 		log.Trace().Msgf("connected to peer %s", a)
-		d.m.Lock()
-		d.connections = append(d.connections, d.peerFromConn(conn, a))
-		d.m.Unlock()
+		d.conn.Store(a, d.peerFromConn(conn, a))
 	}
+
+	d.peersMutex.RUnlock()
+
+	d.peersMutex.Lock()
+	d.peers = d.peers[:0]
+	d.peersMutex.Unlock()
 }
 
 func (d *Download) peerFromConn(conn net.Conn, a string) *peer.Peer {
@@ -126,8 +147,10 @@ func (c *Client) NewDownload(m *metainfo.MetaInfo, downloadDir string) *Download
 		c:      c,
 		peerID: peer.NewID(),
 		// already validated
-		info:     info,
-		infoHash: m.HashInfoBytes(),
+		info:              info,
+		infoHash:          m.HashInfoBytes(),
+		conn:              xsync.NewMapOf[string, *peer.Peer](),
+		connectionHistory: xsync.NewMapOf[string, connHistory](),
 		//key:
 		// there maybe 1 uint64 extra data here.
 		bm:          make(bitmap.Bitmap, info.PieceLength/8+8),
@@ -138,4 +161,9 @@ func (c *Client) NewDownload(m *metainfo.MetaInfo, downloadDir string) *Download
 	d.setAnnounceList(m)
 
 	return d
+}
+
+type connHistory struct {
+	lastTry   time.Time
+	connected bool
 }

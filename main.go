@@ -7,8 +7,9 @@ import (
 	"os/signal"
 	"path/filepath"
 	"slices"
+	"strconv"
+	"strings"
 	"syscall"
-	"time"
 
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/pkg/profile"
@@ -16,31 +17,32 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/samber/lo"
 	"github.com/spf13/pflag"
-	"github.com/trim21/errgo"
-	_ "go.uber.org/automaxprocs"
+	"github.com/spf13/viper"
+	"go.uber.org/automaxprocs/maxprocs"
 
 	"tyr/internal/client"
 	"tyr/internal/config"
+	"tyr/internal/pkg/random"
+	_ "tyr/internal/platform" // deny compile on unsupported platform
 	"tyr/internal/web"
 )
 
-func defaultSessionPath() string {
-	h, err := os.UserHomeDir()
-	if err != nil {
-		panic(errgo.Wrap(err, "failed to get home directory, please set session path with --session-path manually"))
-	}
-
-	return filepath.Join(h, ".tyr")
+func init() {
+	_, _ = maxprocs.Set()
 }
 
 func main() {
-	var sessionPath = pflag.String("session-path", "", "client session path (default ~/.ve/)")
-	var configFilePath = pflag.String("config-file", "", "path to config file (default {session-path}/config.toml)")
-	var address = pflag.String("address", "127.0.0.1:8003", "web interface address")
-	var p2pPort = pflag.Uint16("p2p-port", 0, "p2p listen port (default 50047)")
+	pflag.String("session-path", "", "client session path (default ~/.ve/)")
+	pflag.String("config-file", "", "path to config file (default {session-path}/config.toml)")
+	pflag.String("web", "127.0.0.1:8003", "web interface address")
+	pflag.String("web-secret-token", "", "web interface address secret token")
+	pflag.Uint16("p2p-port", 50047, "p2p listen port")
 
-	var profileCpu = pflag.Bool("profile-cpu", false, "enable CPU profiling only")
-	var profileMem = pflag.Bool("profile-memory", false, "enable Memory profiling only")
+	pflag.Bool("log-json", false, "log as json format")
+	pflag.String("log-level", "error", "log level")
+
+	pflag.Bool("profile-cpu", false, "enable CPU profiling only")
+	pflag.Bool("profile-memory", false, "enable Memory profiling only")
 
 	// this avoids 'pflag: help requested' error when calling for help message.
 	if slices.Contains(os.Args[1:], "--help") || slices.Contains(os.Args[1:], "-h") {
@@ -51,53 +53,83 @@ func main() {
 
 	pflag.Parse()
 
-	if *profileCpu || *profileMem {
+	viper.SetEnvPrefix("TYR")
+	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
+	viper.AutomaticEnv()
+
+	lo.Must0(viper.BindPFlags(pflag.CommandLine), "failed to parse combine argument with env")
+
+	profileMem := viper.GetBool("profile-memory")
+	profileCpu := viper.GetBool("profile-cpu")
+
+	if profileCpu || profileMem {
+		if profileCpu && profileMem {
+			errExit("can not use --profile-memory with --profile-cput")
+		}
+
 		var opt = make([]func(*profile.Profile), 0, 3)
 		opt = append(opt, profile.NoShutdownHook)
 		opt = append(opt, profile.ProfilePath("."))
-		if *profileCpu {
+		if profileCpu {
 			opt = append(opt, profile.CPUProfile)
 		}
-		if *profileMem {
+		if profileMem {
 			opt = append(opt, profile.MemProfile)
 		}
-		fmt.Println("enable profiling")
+		_, _ = fmt.Fprintln(os.Stderr, "enable profiling")
 		defer profile.Start(opt...).Stop()
 	}
 
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+	jsonLog := viper.GetBool("log-json")
 
-	if *sessionPath == "" {
-		*sessionPath = defaultSessionPath()
+	if !jsonLog {
+		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 	}
 
-	if *configFilePath == "" {
-		*configFilePath = filepath.Join(*sessionPath, "config.toml")
+	logLevel := parseLogLevel(viper.GetString("log-level"))
+	log.Logger = log.Logger.Level(logLevel)
+
+	sessionPath := viper.GetString("session-path")
+
+	if sessionPath == "" {
+		sessionPath = defaultSessionPath()
 	}
 
-	if err := os.MkdirAll(*sessionPath, os.ModePerm); err != nil {
-		panic(errgo.Wrap(err, "failed to create session path"))
+	configFilePath := viper.GetString("config-file")
+
+	if configFilePath == "" {
+		configFilePath = filepath.Join(sessionPath, "config.toml")
 	}
 
-	cfg, err := config.LoadFromFile(*configFilePath)
+	if err := os.MkdirAll(sessionPath, os.ModePerm); err != nil {
+		errExit("failed to create session path, must make sure you have permission", err)
+	}
+
+	cfg, err := config.LoadFromFile(configFilePath)
 	if err != nil {
-		print(errgo.Wrap(err, "failed to load config"))
+		errExit("failed to load config", err)
 	}
 
-	if *p2pPort != 0 {
-		cfg.App.P2PPort = *p2pPort
+	cfg.App.P2PPort = viper.GetUint16("p2p-port")
+
+	address := viper.GetString("web")
+	webToken := viper.GetString("web-secret-token")
+
+	if webToken == "" {
+		webToken = random.Base64Str(32)
+		_, _ = fmt.Fprintln(os.Stderr, "no web secret token, generating new token:", strconv.Quote(webToken))
 	}
 
 	app := client.New(cfg)
 
-	lo.Must0(app.AddTorrent(lo.Must(metainfo.LoadFromFile(`C:\Users\Trim21\Downloads\ubuntu-24.04-desktop-amd64.iso.torrent`)), "C:\\Users\\Trim21\\Downloads"))
+	lo.Must0(app.AddTorrent(lo.Must(metainfo.LoadFromFile(`C:\Users\Trim21\Downloads\ubuntu-24.04-desktop-amd64.iso.torrent.patched`)), "C:\\Users\\Trim21\\Downloads"))
 
 	go app.Start()
 
 	go func() {
-		server := web.New(app)
-		fmt.Println("start", *address)
-		err = http.ListenAndServe(*address, server)
+		server := web.New(app, webToken)
+		fmt.Println("start", address)
+		err = http.ListenAndServe(address, server)
 		if err != nil {
 			panic(err)
 		}
@@ -115,5 +147,37 @@ func main() {
 	<-signalChan
 	fmt.Println("shutting down...")
 	app.Shutdown()
-	time.Sleep(time.Second * 5)
+}
+
+func parseLogLevel(s string) zerolog.Level {
+	switch strings.ToLower(s) {
+	case "trace":
+		return zerolog.TraceLevel
+	case "debug":
+		return zerolog.DebugLevel
+	case "info":
+		return zerolog.InfoLevel
+	case "warn":
+		return zerolog.WarnLevel
+	case "error":
+		return zerolog.ErrorLevel
+	}
+
+	errExit(fmt.Sprintf("unknown log level %q, only trace/debug/info/warn/error is allowed\n", s))
+
+	return zerolog.NoLevel
+}
+
+func defaultSessionPath() string {
+	h, err := os.UserHomeDir()
+	if err != nil {
+		errExit("failed to get home directory, please set session path with --session-path manually", err)
+	}
+
+	return filepath.Join(h, ".tyr")
+}
+
+func errExit(msg ...any) {
+	_, _ = fmt.Fprint(os.Stderr, fmt.Sprintln(msg...))
+	os.Exit(1)
 }
