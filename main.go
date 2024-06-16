@@ -27,7 +27,7 @@ func defaultSessionPath() string {
 		panic(errgo.Wrap(err, "failed to get home directory, please set session path with --session-path manually"))
 	}
 
-	return filepath.Join(h, ".ve")
+	return filepath.Join(h, ".tyr")
 }
 
 func main() {
@@ -35,8 +35,10 @@ func main() {
 	var configFilePath = pflag.String("config-file", "", "path to config file (default {session-path}/config.toml)")
 	var address = pflag.String("address", "127.0.0.1:8003", "web interface address")
 	var p2pPort = pflag.Uint16("p2p-port", 0, "p2p listen port (default 50047)")
-	var profileCpu = pflag.Bool("profile-cpu", false, "enable CPU profiling")
-	var profileMem = pflag.Bool("profile-memory", false, "enable Memory profiling")
+
+	var profiling = pflag.Bool("profile", false, "enable profiling for CPU and Memory")
+	var profileCpu = pflag.Bool("profile-cpu", false, "enable CPU profiling only")
+	var profileMem = pflag.Bool("profile-memory", false, "enable Memory profiling only")
 
 	// this avoids 'pflag: help requested' error when calling for help message.
 	if slices.Contains(os.Args[1:], "--help") || slices.Contains(os.Args[1:], "-h") {
@@ -47,12 +49,12 @@ func main() {
 
 	pflag.Parse()
 
-	if *profileCpu || *profileMem {
+	if *profileCpu || *profileMem || *profiling {
 		var opt = make([]func(*profile.Profile), 2)
-		if *profileCpu {
+		if *profileCpu || *profiling {
 			opt = append(opt, profile.CPUProfile)
 		}
-		if *profileMem {
+		if *profileMem || *profiling {
 			opt = append(opt, profile.MemProfile)
 		}
 		defer profile.Start(opt...).Stop()
