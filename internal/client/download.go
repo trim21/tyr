@@ -12,8 +12,8 @@ import (
 	"github.com/samber/lo"
 	"go.uber.org/atomic"
 
-	"tyr/global"
 	"tyr/internal/peer"
+	"tyr/internal/pkg/global"
 	"tyr/internal/req"
 )
 

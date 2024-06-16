@@ -10,8 +10,8 @@ import (
 	"github.com/go-resty/resty/v2"
 	"golang.org/x/sync/semaphore"
 
-	"tyr/global"
 	"tyr/internal/config"
+	"tyr/internal/pkg/global"
 )
 
 func New(cfg config.Config) *Client {

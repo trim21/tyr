@@ -7,7 +7,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	"tyr/global"
+	"tyr/internal/pkg/global"
 )
 
 func (c *Client) Start() {
