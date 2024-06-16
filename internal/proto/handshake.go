@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/anacrolix/torrent/metainfo"
 	"github.com/negrel/assert"
 )
 
@@ -39,7 +40,7 @@ func SendHandshake(conn io.Writer, infoHash, peerID [20]byte) error {
 }
 
 type Handshake struct {
-	InfoHash [20]byte
+	InfoHash metainfo.Hash
 	PeerID   [20]byte
 }
 
@@ -56,10 +57,9 @@ func ReadHandshake(conn io.Reader) (Handshake, error) {
 		return Handshake{}, err
 	}
 
-	assert.Equal(n, 1)
+	assert.Equal(1, n)
 
 	l := b[0]
-	fmt.Println(l)
 
 	b = make([]byte, l)
 	n, err = conn.Read(b)
@@ -78,7 +78,7 @@ func ReadHandshake(conn io.Reader) (Handshake, error) {
 		return Handshake{}, err
 	}
 
-	assert.Equal(n, 8)
+	assert.Equal(8, n)
 
 	var h = Handshake{}
 
@@ -86,14 +86,14 @@ func ReadHandshake(conn io.Reader) (Handshake, error) {
 	if err != nil {
 		return Handshake{}, err
 	}
-	assert.Equal(n, 20)
+	assert.Equal(20, n)
 
 	n, err = conn.Read(h.PeerID[:])
 	if err != nil {
 		return Handshake{}, err
 	}
 
-	assert.Equal(n, 20)
+	assert.Equal(20, n)
 
 	return h, nil
 }

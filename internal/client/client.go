@@ -12,7 +12,6 @@ import (
 
 	"tyr/global"
 	"tyr/internal/config"
-	"tyr/internal/download"
 )
 
 func New(cfg config.Config) *Client {
@@ -28,15 +27,15 @@ func New(cfg config.Config) *Client {
 		// key is info hash raw bytes as string
 		// it's not info hash hex string
 		sem:         semaphore.NewWeighted(int64(cfg.App.PeersLimit)),
-		downloadMap: make(map[string]*download.Download),
+		downloadMap: make(map[string]*Download),
 		http:        resty.NewWithClient(hc).SetHeader("User-Agent", global.UserAgent),
 	}
 }
 
 type Client struct {
 	http        *resty.Client
-	downloads   []*download.Download
-	downloadMap map[string]*download.Download
+	downloads   []*Download
+	downloadMap map[string]*Download
 	Config      config.Config
 	m           sync.RWMutex
 	sem         *semaphore.Weighted
@@ -54,7 +53,7 @@ func (c *Client) AddTorrent(m *metainfo.MetaInfo, downloadPath string) error {
 	c.m.Lock()
 	defer c.m.Unlock()
 
-	d := download.New(m, downloadPath)
+	d := c.NewDownload(m, downloadPath)
 
 	c.downloads = append(c.downloads, d)
 	c.downloadMap[infoHash.AsString()] = d

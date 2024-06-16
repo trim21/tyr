@@ -5,15 +5,12 @@ import (
 	"io"
 
 	"github.com/kelindar/bitmap"
-	"github.com/negrel/assert"
 
 	"tyr/internal/util"
 )
 
 func NewBitfield(conn io.Writer, bm bitmap.Bitmap, piecesLen int) error {
 	chunked := util.BitmapToChunked(bm, piecesLen)
-
-	assert.Len(chunked, 300)
 
 	err := binary.Write(conn, binary.BigEndian, uint32(1+len(chunked)))
 	if err != nil {

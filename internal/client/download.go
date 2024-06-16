@@ -1,15 +1,18 @@
-package download
+package client
 
 import (
+	"net"
 	"net/netip"
 	"sync"
 	stdSync "sync/atomic"
 
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/kelindar/bitmap"
+	"github.com/rs/zerolog/log"
 	"github.com/samber/lo"
 	"go.uber.org/atomic"
 
+	"tyr/global"
 	"tyr/internal/peer"
 	"tyr/internal/req"
 )
@@ -22,7 +25,9 @@ const Stopped State = 1
 const Uploading State = 2
 
 type Download struct {
-	m sync.Mutex
+	m sync.RWMutex
+
+	c *Client
 
 	meta        metainfo.MetaInfo
 	info        metainfo.Info
@@ -31,6 +36,7 @@ type Download struct {
 
 	bm         bitmap.Bitmap
 	downloaded atomic.Int64
+	done       atomic.Bool
 	uploaded   atomic.Int64
 	completed  atomic.Int64
 
@@ -49,7 +55,7 @@ type Download struct {
 	state       uint8
 	private     bool
 	trackers    []TrackerTier
-	connections []peer.Peer
+	connections []*peer.Peer
 	// announce response
 	peers       []netip.AddrPort
 	trackerTier int
@@ -58,12 +64,56 @@ type Download struct {
 	err             error
 }
 
-// TODO global peers limit
-func (d *Download) connectToPeers() {
+func (d *Download) cleanDeadPeers() {
+	d.m.Lock()
+	before := len(d.connections)
+	d.connections = lo.Filter(d.connections, func(item *peer.Peer, index int) bool {
+		return !item.Dead()
+	})
+	after := len(d.connections)
+	d.m.Unlock()
 
+	d.c.sem.Release(int64(after - before))
 }
 
-func New(m *metainfo.MetaInfo, downloadDir string) *Download {
+func (d *Download) connectToPeers() {
+	log.Trace().Msg("connectToPeers")
+	d.cleanDeadPeers()
+
+	for _, p := range d.peers {
+		a := p.String()
+		log.Trace().Msgf("check peer %s", a)
+		d.m.RLock()
+		connected := lo.ContainsBy(d.connections, func(item *peer.Peer) bool {
+			return item.Address == a
+		})
+		d.m.RUnlock()
+
+		if connected {
+			log.Trace().Msgf("peer connected")
+			continue
+		}
+
+		if !d.c.sem.TryAcquire(1) {
+			return
+		}
+
+		conn, err := global.Dialer.Dial("tcp", a)
+		if err != nil {
+			continue
+		}
+		log.Trace().Msgf("connected to peer %s", a)
+		d.m.Lock()
+		d.connections = append(d.connections, d.peerFromConn(conn, a))
+		d.m.Unlock()
+	}
+}
+
+func (d *Download) peerFromConn(conn net.Conn, a string) *peer.Peer {
+	return peer.New(conn, d.infoHash, uint32(d.info.NumPieces()), a)
+}
+
+func (c *Client) NewDownload(m *metainfo.MetaInfo, downloadDir string) *Download {
 	info := lo.Must(m.UnmarshalInfo())
 
 	var private bool
@@ -73,6 +123,7 @@ func New(m *metainfo.MetaInfo, downloadDir string) *Download {
 
 	d := &Download{
 		meta:   *m,
+		c:      c,
 		peerID: peer.NewID(),
 		// already validated
 		info:     info,

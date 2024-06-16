@@ -33,7 +33,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	p := peer.New(rw, [20]byte(infoHash), 10510)
+	p := peer.New(rw, [20]byte(infoHash), 10510, "")
 	h, err := p.Handshake()
 	if err != nil {
 		panic(err)
@@ -85,14 +85,14 @@ func main() {
 			if ctx.Err() != nil {
 				return
 			}
-			p.M.Lock()
+			p.m.Lock()
 			log.Trace().Msg("keep alive")
 			if err := proto.SendKeepAlive(p.Conn); err != nil {
-				p.M.Unlock()
+				p.m.Unlock()
 				cancel()
 				panic(err)
 			}
-			p.M.Unlock()
+			p.m.Unlock()
 		}
 	}()
 

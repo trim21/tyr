@@ -1,4 +1,4 @@
-package download
+package client
 
 import (
 	"bytes"
@@ -31,7 +31,9 @@ func (d *Download) CouldAnnounce() bool {
 
 func (d *Download) AsyncAnnounce(http *resty.Client) {
 	d.asyncAnnounce(http)
-	d.connectToPeers()
+	if !d.done.Load() {
+		d.connectToPeers()
+	}
 }
 
 func (d *Download) asyncAnnounce(http *resty.Client) {
@@ -47,7 +49,7 @@ func (d *Download) asyncAnnounce(http *resty.Client) {
 			// TODO: enable announcing to all tier by config
 			return
 		}
-		if len(d.peers) != 0 {
+		if len(r.Peers) != 0 {
 			d.m.Lock()
 			d.peers = append(d.peers, r.Peers...)
 			d.peers = lo.UniqBy(d.peers, func(item netip.AddrPort) string {
@@ -90,7 +92,7 @@ func (tier TrackerTier) Announce(d *Download, http *resty.Client) (AnnounceResul
 		var r trackerAnnounceResponse
 		err = bencode.DecodeBytes(res.Body(), &r)
 		if err != nil {
-			log.Debug().Err(err).Msg("failed to decode tracker response")
+			log.Debug().Err(err).Str("res", res.String()).Msg("failed to decode tracker response")
 			t.err = errgo.Wrap(err, "failed to parse torrent announce response")
 			return AnnounceResult{}, err
 		}
@@ -138,16 +140,15 @@ func (tier TrackerTier) Announce(d *Download, http *resty.Client) (AnnounceResul
 		if r.Peers6.Set {
 			if r.Peers6.Value[0] == 'l' && r.Peers6.Value[len(r.Peers6.Value)-1] == 'e' {
 				// non compact response
-				result.Peers6 = parseNonCompatResponse(r.Peers6.Value)
+				result.Peers = append(result.Peers, parseNonCompatResponse(r.Peers6.Value)...)
 			} else {
 				// compact response
 				var s []byte
 				if bencode.DecodeBytes(r.Peers.Value, &s) == nil {
-					result.Peers6 = make([]netip.AddrPort, len(s)/6)
 					for i := 0; i < len(s); i += 18 {
 						addr := netip.AddrFrom16([16]byte(s[i : i+16]))
 						port := binary.BigEndian.Uint16(s[i+16:])
-						result.Peers6 = append(result.Peers6, netip.AddrPortFrom(addr, port))
+						result.Peers = append(result.Peers, netip.AddrPortFrom(addr, port))
 					}
 				}
 			}
@@ -185,7 +186,6 @@ func parseNonCompatResponse(data []byte) []netip.AddrPort {
 type AnnounceResult struct {
 	Interval time.Duration
 	Peers    []netip.AddrPort
-	Peers6   []netip.AddrPort
 }
 
 type trackerAnnounceResponse struct {

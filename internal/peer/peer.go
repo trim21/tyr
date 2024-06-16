@@ -1,62 +1,89 @@
 package peer
 
 import (
+	"context"
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"io"
+	"net/url"
 	"sync"
+	"sync/atomic"
 
 	"github.com/anacrolix/torrent"
 	"github.com/kelindar/bitmap"
+	"github.com/puzpuzpuz/xsync"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
 	"github.com/negrel/assert"
 
+	"tyr/internal/pkg/empty"
 	"tyr/internal/proto"
 	"tyr/internal/req"
 	"tyr/internal/util"
 )
 
-func New(conn io.ReadWriteCloser, infoHash [20]byte, pieceNum uint32) Peer {
-	return Peer{Conn: conn, InfoHash: infoHash, PieceNum: pieceNum, M: &sync.Mutex{}}
+func New(conn io.ReadWriteCloser, infoHash [20]byte, pieceNum uint32, addr string) *Peer {
+	ctx, cancel := context.WithCancel(context.Background())
+	p := &Peer{
+		ctx:       ctx,
+		log:       log.With().Hex("info_hash", infoHash[:]).Str("addr", addr).Logger(),
+		m:         sync.Mutex{},
+		Conn:      conn,
+		InfoHash:  infoHash,
+		bitmapLen: util.BitmapLen(pieceNum),
+		requests:  xsync.MapOf[req.Request, empty.Empty]{},
+	}
+	p.cancel = func() {
+		p.dead.Store(true)
+		cancel()
+	}
+	go p.start()
+	return p
 }
 
 var ErrPeerSendInvalidData = errors.New("peer send invalid data")
 
 type Peer struct {
-	Conn     io.ReadWriteCloser
-	M        *sync.Mutex
-	Bitmap   bitmap.Bitmap
-	requests req.Request
+	m sync.Mutex
+
+	dead atomic.Bool
+
+	log zerolog.Logger
+
+	resChan chan<- req.Response
+	reqChan chan req.Request
+
+	requests xsync.MapOf[req.Request, empty.Empty]
+
+	ctx    context.Context
+	cancel context.CancelFunc
+
+	Conn    io.ReadWriteCloser
+	Address string
+
+	// bitmap of connected peer
+	Bitmap    bitmap.Bitmap
+	bitmapLen uint32
+
+	// torrent metainfo
 	InfoHash torrent.InfoHash
-	PieceNum uint32
-}
 
-func (p Peer) bitmapLen() int {
-	if p.PieceNum%8 == 0 {
-		return int(p.PieceNum / 8)
-	}
-
-	return int(8 * (p.PieceNum/8 + 1))
-}
-
-func (p Peer) Handshake() (proto.Handshake, error) {
-	peerID := NewID()
-	fmt.Printf("current peer id %s\n", peerID)
-	if err := proto.SendHandshake(p.Conn, p.InfoHash, peerID); err != nil {
-		return proto.Handshake{}, err
-	}
-
-	return proto.ReadHandshake(p.Conn)
+	Choked     atomic.Bool
+	Interested atomic.Bool
 }
 
 type Event struct {
 	Bitmap bitmap.Bitmap
+	Res    req.Response
+	Req    req.Request
 	Event  proto.Message
+	Index  uint32
+
+	keepAlive bool
 }
 
-func (p Peer) DecodeEvents() (Event, error) {
+func (p *Peer) DecodeEvents() (Event, error) {
 	var b = make([]byte, 4)
 	n, err := p.Conn.Read(b)
 	if err != nil {
@@ -66,14 +93,14 @@ func (p Peer) DecodeEvents() (Event, error) {
 	assert.Equal(n, 4)
 
 	l := binary.BigEndian.Uint32(b)
-	fmt.Println("len", l)
 
+	// keep alive
 	if l == 0 {
 		// keep alive
 		return Event{}, nil
 	}
 
-	log.Trace().Msgf("try to decode message with length %d", l)
+	p.log.Trace().Msgf("try to decode message with length %d", l)
 	n, err = p.Conn.Read(b[:1])
 	if err != nil {
 		return Event{}, err
@@ -82,32 +109,125 @@ func (p Peer) DecodeEvents() (Event, error) {
 	assert.Equal(n, 1)
 
 	evt := proto.Message(b[0])
-	log.Trace().Msgf("try to decode message event '%s'", evt)
+	p.log.Trace().Msgf("try to decode message event '%s'", evt)
 	switch evt {
 	case proto.Bitfield:
 		return p.decodeBitfield(l)
+	case proto.Have:
+		return p.decodeHave(l)
+	case proto.Interested, proto.NotInterested, proto.Choke, proto.Unchoke:
+		return Event{Event: evt}, nil
 	}
 
+	// unknown events
 	_, err = io.CopyN(io.Discard, p.Conn, int64(l-1))
-	return Event{}, err
+	return Event{Event: evt}, err
 }
 
-func (p Peer) decodeBitfield(l uint32) (Event, error) {
-	if int(l) != p.bitmapLen() {
-		return Event{}, ErrPeerSendInvalidData
-	}
-
-	var b = make([]byte, l-1)
-	n, err := p.Conn.Read(b)
+func (p *Peer) start() {
+	defer p.cancel()
+	h, err := p.Handshake()
 	if err != nil {
-		return Event{}, err
 	}
 
-	log.Trace().Msgf("receive bitfield payload length %d", l-1)
+	if h.InfoHash != p.InfoHash {
+		p.log.Trace().Msgf("peer info hash mismatch %x", h.InfoHash)
+		return
+	}
 
-	assert.Equal(n, int(l-1))
+	p.log.Trace().Msgf("connect to peer %s", url.QueryEscape(string(h.PeerID[:])))
 
-	bm := util.BitmapFromChunked(b)
+	go func() {
+		for {
+			select {
+			case <-p.ctx.Done():
+				return
+			case r := <-p.reqChan:
+				p.requests.Store(r, empty.Empty{})
+				err := p.sendEvent(Event{
+					Event: proto.Request,
+					Req:   r,
+				})
+				// TODO: should handle error here
+				if err != nil {
+					return
+				}
+			}
+		}
+	}()
 
-	return Event{Event: proto.Bitfield, Bitmap: bm}, err
+	for {
+		if p.ctx.Err() != nil {
+			return
+		}
+		event, err := p.DecodeEvents()
+		if err != nil {
+			if errors.Is(err, ErrPeerSendInvalidData) {
+				_ = p.Conn.Close()
+				return
+			}
+			_ = p.Conn.Close()
+			return
+		}
+
+		switch event.Event {
+		case proto.Bitfield:
+			p.Bitmap.Xor(event.Bitmap)
+		case proto.Have:
+			p.Bitmap.Set(event.Index)
+		case proto.Interested:
+			p.Interested.Store(true)
+		case proto.NotInterested:
+			p.Interested.Store(false)
+		case proto.Choke:
+			p.Choked.Store(true)
+		case proto.Unchoke:
+			p.Choked.Store(false)
+		case proto.Piece:
+			if !p.validateRes(event.Res) {
+				// send response without requests
+				_ = p.Conn.Close()
+				return
+			}
+			p.resChan <- event.Res
+		case proto.Request:
+			p.reqChan <- event.Req
+		}
+
+		p.log.Trace().Msgf("receive %s event", event.Event)
+	}
+}
+
+func (p *Peer) sendEvent(event Event) error {
+	p.m.Lock()
+	defer p.m.Unlock()
+
+	if event.keepAlive {
+		return proto.SendKeepAlive(p.Conn)
+	}
+
+	switch event.Event {
+	case proto.Request:
+		return proto.SendRequest(p.Conn, event.Req)
+	}
+
+	return nil
+}
+
+func (p *Peer) validateRes(res req.Response) bool {
+	r := req.Request{
+		PieceIndex: res.PieceIndex,
+		Begin:      res.Begin,
+		Length:     uint32(len(res.Data)),
+	}
+
+	if _, ok := p.requests.Load(r); ok {
+		p.requests.Delete(r)
+		return true
+	}
+	return false
+}
+
+func (p *Peer) Dead() bool {
+	return p.dead.Load()
 }

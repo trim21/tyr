@@ -14,6 +14,8 @@ require (
 	github.com/labstack/echo/v4 v4.12.0
 	github.com/negrel/assert v0.2.0
 	github.com/panjf2000/ants/v2 v2.9.1
+	github.com/pkg/profile v1.7.0
+	github.com/puzpuzpuz/xsync v1.5.2
 	github.com/rs/zerolog v1.33.0
 	github.com/samber/lo v1.39.0
 	github.com/santhosh-tekuri/jsonschema/v2 v2.2.0
@@ -59,11 +61,13 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dustin/go-humanize v1.0.0 // indirect
 	github.com/edsrzf/mmap-go v1.1.0 // indirect
+	github.com/felixge/fgprof v0.9.3 // indirect
 	github.com/go-llsqlite/adapter v0.0.0-20230927005056-7f5ce7f0c916 // indirect
 	github.com/go-llsqlite/crawshaw v0.5.2-0.20240425034140-f30eb7704568 // indirect
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/btree v1.1.2 // indirect
+	github.com/google/pprof v0.0.0-20221118152302-e6195bd50e26 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/huandu/xstrings v1.3.2 // indirect

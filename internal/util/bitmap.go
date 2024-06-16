@@ -25,3 +25,11 @@ func BitmapToChunked(bm bitmap.Bitmap, piecesLen int) []byte {
 
 	return b[:piecesLen/8+1]
 }
+
+func BitmapLen(n uint32) uint32 {
+	if n%8 == 0 {
+		return n / 8
+	}
+
+	return 8 * (n/8 + 1)
+}

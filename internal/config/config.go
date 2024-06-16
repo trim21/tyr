@@ -22,7 +22,7 @@ type Config struct {
 
 func LoadFromFile(path string) (Config, error) {
 	var cfg = Config{
-		App: Application{MaxHTTPParallel: 100},
+		App: Application{MaxHTTPParallel: 100, PeersLimit: 50},
 	}
 
 	if _, err := toml.DecodeFile(path, &cfg); err != nil {
