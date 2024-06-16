@@ -6,7 +6,7 @@ toolchain go1.22.0
 
 require (
 	github.com/BurntSushi/toml v1.4.0
-	github.com/anacrolix/torrent v1.56.0
+	github.com/anacrolix/torrent v1.56.1
 	github.com/bool64/dev v0.2.34
 	github.com/dchest/uniuri v1.2.0
 	github.com/go-resty/resty/v2 v2.13.1
