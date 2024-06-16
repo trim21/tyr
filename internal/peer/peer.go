@@ -11,7 +11,7 @@ import (
 
 	"github.com/anacrolix/torrent"
 	"github.com/kelindar/bitmap"
-	"github.com/puzpuzpuz/xsync"
+	"github.com/puzpuzpuz/xsync/v2"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
