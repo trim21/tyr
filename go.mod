@@ -15,7 +15,7 @@ require (
 	github.com/negrel/assert v0.2.0
 	github.com/panjf2000/ants/v2 v2.9.1
 	github.com/pkg/profile v1.7.0
-	github.com/puzpuzpuz/xsync v1.5.2
+	github.com/puzpuzpuz/xsync/v3 v3.1.0
 	github.com/rs/zerolog v1.33.0
 	github.com/samber/lo v1.39.0
 	github.com/santhosh-tekuri/jsonschema/v2 v2.2.0
