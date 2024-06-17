@@ -12,6 +12,8 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
 	"github.com/go-resty/resty/v2"
+	"github.com/samber/lo"
+	"go.uber.org/atomic"
 	"golang.org/x/sync/semaphore"
 
 	"tyr/internal/config"
@@ -19,7 +21,7 @@ import (
 	"tyr/internal/pkg/global"
 )
 
-func New(cfg config.Config) *Client {
+func New(cfg config.Config, sessionPath string) *Client {
 	tr := &http.Transport{
 		MaxIdleConns:       cfg.App.MaxHTTPParallel,
 		IdleConnTimeout:    30 * time.Second,
@@ -27,7 +29,7 @@ func New(cfg config.Config) *Client {
 	}
 	hc := &http.Client{Transport: tr}
 
-	ctx, cancl := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
 
 	var mseDisabled bool
 	var mseSelector mse.CryptoSelector
@@ -47,38 +49,52 @@ func New(cfg config.Config) *Client {
 	return &Client{
 		Config: cfg,
 		ctx:    ctx,
-		cancl:  cancl,
+		cancel: cancel,
 		// key is info hash raw bytes as string
 		// it's not info hash hex string
 		sem:         semaphore.NewWeighted(int64(cfg.App.PeersLimit)),
-		downloadMap: make(map[string]*Download),
-		connChan:    make(chan io.ReadWriteCloser, 1),
+		checkQueue:  make([]metainfo.Hash, 0, 10),
+		downloadMap: make(map[metainfo.Hash]*Download),
+		connChan:    make(chan incomingConn, 1),
 		http:        resty.NewWithClient(hc).SetHeader("User-Agent", global.UserAgent),
 		mseDisabled: mseDisabled,
 		mseSelector: mseSelector,
+		sessionPath: sessionPath,
 	}
+}
+
+type incomingConn struct {
+	addr string
+	conn io.ReadWriteCloser
 }
 
 type Client struct {
 	http        *resty.Client
 	ctx         context.Context
-	cancl       context.CancelFunc
+	cancel      context.CancelFunc
 	downloads   []*Download
-	downloadMap map[string]*Download
+	downloadMap map[metainfo.Hash]*Download
 	mseKeys     mse.SecretKeyIter
 	Config      config.Config
 	m           sync.RWMutex
-	connChan    chan io.ReadWriteCloser
-	sem         *semaphore.Weighted
+	connChan    chan incomingConn
+
+	checkQueueLock sync.Mutex
+	checkQueue     []metainfo.Hash
+
+	sem             *semaphore.Weighted
+	connectionCount atomic.Uint32
 
 	mseSelector mse.CryptoSelector
 	mseDisabled bool
+
+	sessionPath string
 }
 
-func (c *Client) AddTorrent(m *metainfo.MetaInfo, downloadPath string) error {
-	c.m.RLock()
+func (c *Client) AddTorrent(m *metainfo.MetaInfo, info metainfo.Info, downloadPath string, tags []string) error {
 	infoHash := m.HashInfoBytes()
-	if _, ok := c.downloadMap[infoHash.AsString()]; ok {
+	c.m.RLock()
+	if _, ok := c.downloadMap[infoHash]; ok {
 		c.m.RUnlock()
 		return errors.New(infoHash.HexString() + " exists")
 	}
@@ -87,10 +103,35 @@ func (c *Client) AddTorrent(m *metainfo.MetaInfo, downloadPath string) error {
 	c.m.Lock()
 	defer c.m.Unlock()
 
-	d := c.NewDownload(m, downloadPath)
+	d := c.NewDownload(m, info, downloadPath, tags)
+
+	lo.Must0(global.Pool.Submit(d.Init))
 
 	c.downloads = append(c.downloads, d)
-	c.downloadMap[infoHash.AsString()] = d
+	c.downloadMap[infoHash] = d
 
 	return nil
+}
+
+func (c *Client) addCheck(d *Download) {
+	c.m.Lock()
+	defer c.m.Unlock()
+
+	c.checkQueue = append(c.checkQueue, d.infoHash)
+}
+
+func (c *Client) checkComplete(d *Download) {
+	c.m.Lock()
+	defer c.m.Unlock()
+
+	remove(c.checkQueue, d.infoHash)
+}
+
+func remove[T comparable](l []T, item T) []T {
+	for i, other := range l {
+		if other == item {
+			return append(l[:i], l[i+1:]...)
+		}
+	}
+	return l
 }

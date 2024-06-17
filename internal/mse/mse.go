@@ -4,9 +4,8 @@ import (
 	"io"
 	"net"
 
+	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
-
-	"tyr/internal/pkg/unsafe"
 )
 
 type rw struct {
@@ -15,25 +14,20 @@ type rw struct {
 }
 
 func ForceCrypto(provided mse.CryptoMethod) mse.CryptoMethod {
-	// We prefer plaintext for performance reasons.
-	if provided&mse.CryptoMethodRC4 != 0 {
-		return mse.CryptoMethodRC4
-	}
-	return mse.CryptoMethodPlaintext
+	return mse.CryptoMethodRC4
 }
 
 func PreferCrypto(provided mse.CryptoMethod) mse.CryptoMethod {
-	// We prefer plaintext for performance reasons.
 	if provided&mse.CryptoMethodRC4 != 0 {
 		return mse.CryptoMethodRC4
 	}
 	return mse.CryptoMethodPlaintext
 }
 
-func NewAccept(conn net.Conn, keys []string, selector mse.CryptoSelector) (io.ReadWriteCloser, error) {
-	rwc, _, err := mse.ReceiveHandshake(conn, func(f func([]byte) bool) {
+func NewAccept(conn net.Conn, keys []metainfo.Hash, selector mse.CryptoSelector) (io.ReadWriteCloser, error) {
+	rw, _, err := mse.ReceiveHandshake(conn, func(f func([]byte) bool) {
 		for _, ih := range keys {
-			if !f(unsafe.Bytes(ih)) {
+			if !f(ih[:]) {
 				break
 			}
 		}
@@ -43,7 +37,7 @@ func NewAccept(conn net.Conn, keys []string, selector mse.CryptoSelector) (io.Re
 		return nil, err
 	}
 
-	return wrappedConn{ReadWriter: rwc, Closer: conn}, err
+	return wrappedConn{ReadWriter: rw, Closer: conn}, err
 }
 
 func NewConnection(infoHash []byte, conn net.Conn) (io.ReadWriteCloser, error) {

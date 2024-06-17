@@ -6,12 +6,17 @@ toolchain go1.22.0
 
 require (
 	github.com/BurntSushi/toml v1.4.0
+	github.com/RoaringBitmap/roaring/v2 v2.2.2
 	github.com/anacrolix/torrent v1.56.1
 	github.com/bool64/dev v0.2.34
 	github.com/dchest/uniuri v1.2.0
+	github.com/detailyang/go-fallocate v0.0.0-20180908115635-432fa640bd2e
+	github.com/docker/go-units v0.5.0
+	github.com/dustin/go-humanize v1.0.0
 	github.com/go-resty/resty/v2 v2.13.1
 	github.com/kelindar/bitmap v1.5.2
 	github.com/labstack/echo/v4 v4.12.0
+	github.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f
 	github.com/negrel/assert v0.2.0
 	github.com/panjf2000/ants/v2 v2.9.1
 	github.com/pkg/profile v1.7.0
@@ -19,6 +24,7 @@ require (
 	github.com/rs/zerolog v1.33.0
 	github.com/samber/lo v1.39.0
 	github.com/santhosh-tekuri/jsonschema/v2 v2.2.0
+	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.19.0
 	github.com/stretchr/testify v1.9.0
@@ -28,6 +34,7 @@ require (
 	github.com/swaggest/swgui v1.8.1
 	github.com/swaggest/usecase v1.3.1
 	github.com/trim21/errgo v0.0.2
+	github.com/valyala/bytebufferpool v1.0.0
 	github.com/zeebo/bencode v1.0.0
 	go.uber.org/atomic v1.11.0
 	go.uber.org/automaxprocs v1.5.3
@@ -57,12 +64,11 @@ require (
 	github.com/anacrolix/utp v0.1.0 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/benbjohnson/immutable v0.3.0 // indirect
-	github.com/bits-and-blooms/bitset v1.2.2 // indirect
+	github.com/bits-and-blooms/bitset v1.12.0 // indirect
 	github.com/bool64/shared v0.1.5 // indirect
 	github.com/bradfitz/iter v0.0.0-20191230175014-e8f45d346db8 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
-	github.com/dustin/go-humanize v1.0.0 // indirect
 	github.com/edsrzf/mmap-go v1.1.0 // indirect
 	github.com/felixge/fgprof v0.9.3 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
@@ -116,7 +122,6 @@ require (
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
 	github.com/sergi/go-diff v1.3.1 // indirect
 	github.com/shurcooL/httpgzip v0.0.0-20190720172056-320755c1c1b0 // indirect
-	github.com/sourcegraph/conc v0.3.0 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/spf13/afero v1.11.0 // indirect
 	github.com/spf13/cast v1.6.0 // indirect
@@ -124,7 +129,6 @@ require (
 	github.com/swaggest/jsonschema-go v0.3.70 // indirect
 	github.com/swaggest/refl v1.3.0 // indirect
 	github.com/tidwall/btree v1.6.0 // indirect
-	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	github.com/yudai/gojsondiff v1.0.0 // indirect
 	github.com/yudai/golcs v0.0.0-20170316035057-ecda9a501e82 // indirect

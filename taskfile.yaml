@@ -13,13 +13,13 @@ tasks:
 
   build:dev:
     generates:
-      - tmp/tmp.exe
+      - dist/tmp/tmp.exe
     sources:
       - go.mod
       - go.sum
       - "**/*.go"
       - "**/*.json"
-    cmd: go build -race -tags assert -o tmp/tmp.exe main.go
+    cmd: go build -race -tags assert -o dist/tmp/tmp.exe main.go
 
   dev:
     watch: true
@@ -28,15 +28,15 @@ tasks:
     dotenv:
       - .env
     cmds:
-      - cp tmp/tmp.exe tmp/server.exe
-      - ./tmp/server.exe --web 127.0.0.1:8002 --config-file ./config.toml
+      - cp dist/tmp/tmp.exe dist/tmp/server.exe
+      - ./dist/tmp/server.exe --web 127.0.0.1:8002 --config-file ./config.toml
 
   dev:release:
     watch: true
     deps:
       - build
     cmds:
-      - cp dist/tyr.exe tmp/server.exe
-      - ./tmp/server.exe --web 127.0.0.1:8002 --config-file ./config.toml
+      - cp dist/tyr.exe dist/server.exe
+      - ./dist/server.exe --web 127.0.0.1:8002 --config-file ./config.toml
 
   lint: golangci-lint run

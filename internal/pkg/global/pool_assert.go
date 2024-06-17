@@ -11,6 +11,6 @@ type debugPool struct {
 }
 
 func (p *debugPool) Submit(task func()) error {
-	task()
+	go task()
 	return nil
 }

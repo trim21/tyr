@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"fmt"
 	"path/filepath"
 
 	"github.com/anacrolix/torrent/metainfo"
+	"github.com/docker/go-units"
+	"github.com/dustin/go-humanize"
 	"github.com/swaggest/usecase"
 	"github.com/trim21/errgo"
 
@@ -15,9 +18,10 @@ import (
 )
 
 type AddTorrentReq struct {
-	TorrentFile string `json:"torrent_file" description:"base64 encoded torrent file content"`
-	DownloadDir string `json:"download_dir" description:"base64 encoded download dir"`
-	IsBaseDir   bool   `json:"is_base_dir" description:"if true, will not append torrent name to download_dir"`
+	TorrentFile string   `json:"torrent_file" description:"base64 encoded torrent file content"`
+	DownloadDir string   `json:"download_dir" description:"base64 encoded download dir"`
+	IsBaseDir   bool     `json:"is_base_dir" description:"if true, will not append torrent name to download_dir"`
+	Tags        []string `json:"tags"`
 }
 
 type AddTorrentRes struct {
@@ -46,6 +50,12 @@ func AddTorrent(h *jsonrpc.Handler, c *client.Client) {
 				return CodeError(3, errgo.Wrap(err, "bt v2 only torrent not supported yet"))
 			}
 
+			if info.PieceLength > 256*units.MiB {
+				return CodeError(4,
+					fmt.Errorf("piece length %s too big, only allow <= 256 MiB",
+						humanize.IBytes(uint64(info.PieceLength))))
+			}
+
 			var downloadDir = req.DownloadDir
 
 			if downloadDir == "" {
@@ -56,9 +66,12 @@ func AddTorrent(h *jsonrpc.Handler, c *client.Client) {
 				}
 			}
 
-			err = c.AddTorrent(m, downloadDir)
+			if req.Tags == nil {
+				req.Tags = []string{}
+			}
+			err = c.AddTorrent(m, info, downloadDir, req.Tags)
 			if err != nil {
-				return CodeError(3, errgo.Wrap(err, "failed to add torrent to download"))
+				return CodeError(5, errgo.Wrap(err, "failed to add torrent to download"))
 			}
 
 			*res = AddTorrentRes{InfoHash: m.HashInfoBytes().HexString()}

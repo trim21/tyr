@@ -95,6 +95,8 @@ func main() {
 		sessionPath = defaultSessionPath()
 	}
 
+	createSessionDirectory(sessionPath)
+
 	configFilePath := viper.GetString("config-file")
 
 	if configFilePath == "" {
@@ -120,11 +122,14 @@ func main() {
 		_, _ = fmt.Fprintln(os.Stderr, "no web secret token, generating new token:", strconv.Quote(webToken))
 	}
 
-	app := client.New(cfg)
+	app := client.New(cfg, sessionPath)
 
-	lo.Must0(app.AddTorrent(lo.Must(metainfo.LoadFromFile(`C:\Users\Trim21\Downloads\ubuntu-24.04-desktop-amd64.iso.torrent.patched`)), "C:\\Users\\Trim21\\Downloads"))
+	if err := app.Start(); err != nil {
+		errExit("failed to listen on p2p port", err)
+	}
 
-	go app.Start()
+	m := lo.Must(metainfo.LoadFromFile(`C:\Users\Trim21\Downloads\ubuntu-24.04-desktop-amd64.iso.torrent.patched`))
+	lo.Must0(app.AddTorrent(m, lo.Must(m.UnmarshalInfo()), "C:\\Users\\Trim21\\Downloads\\ubuntu", strings.Split("a q e", " ")))
 
 	go func() {
 		server := web.New(app, webToken)
@@ -139,9 +144,11 @@ func main() {
 
 	signal.Notify(
 		signalChan,
-		syscall.SIGHUP,  // kill -SIGHUP XXXX
-		syscall.SIGINT,  // kill -SIGINT XXXX or Ctrl+c
-		syscall.SIGQUIT, // kill -SIGQUIT XXXX
+		syscall.SIGHUP,
+		syscall.SIGINT,
+		syscall.SIGQUIT,
+		syscall.SIGKILL,
+		syscall.SIGTERM,
 	)
 
 	<-signalChan
@@ -180,4 +187,11 @@ func defaultSessionPath() string {
 func errExit(msg ...any) {
 	_, _ = fmt.Fprint(os.Stderr, fmt.Sprintln(msg...))
 	os.Exit(1)
+}
+
+func createSessionDirectory(sessionPath string) {
+	err := os.MkdirAll(filepath.Join(sessionPath, "torrents"), os.ModePerm)
+	if err != nil {
+		errExit("fail to create directory for session", err)
+	}
 }

@@ -38,7 +38,26 @@ func New(conn io.ReadWriteCloser, infoHash [20]byte, pieceNum uint32, addr strin
 		p.dead.Store(true)
 		cancel()
 	}
-	go p.start()
+	go p.start(true)
+	return p
+}
+
+func NewIncoming(conn io.ReadWriteCloser, infoHash [20]byte, pieceNum uint32, addr string) *Peer {
+	ctx, cancel := context.WithCancel(context.Background())
+	p := &Peer{
+		ctx:       ctx,
+		log:       log.With().Hex("info_hash", infoHash[:]).Str("addr", addr).Logger(),
+		m:         sync.Mutex{},
+		Conn:      conn,
+		InfoHash:  infoHash,
+		bitmapLen: util.BitmapLen(pieceNum),
+		requests:  xsync.MapOf[req.Request, empty.Empty]{},
+	}
+	p.cancel = func() {
+		p.dead.Store(true)
+		cancel()
+	}
+	go p.start(false)
 	return p
 }
 
@@ -124,18 +143,18 @@ func (p *Peer) DecodeEvents() (Event, error) {
 	return Event{Event: evt}, err
 }
 
-func (p *Peer) start() {
+func (p *Peer) start(skipHandshake bool) {
 	defer p.cancel()
-	h, err := p.Handshake()
-	if err != nil {
+	if !skipHandshake {
+		h, err := p.Handshake()
+		if err != nil {
+		}
+		if h.InfoHash != p.InfoHash {
+			p.log.Trace().Msgf("peer info hash mismatch %x", h.InfoHash)
+			return
+		}
+		p.log.Trace().Msgf("connect to peer %s", url.QueryEscape(string(h.PeerID[:])))
 	}
-
-	if h.InfoHash != p.InfoHash {
-		p.log.Trace().Msgf("peer info hash mismatch %x", h.InfoHash)
-		return
-	}
-
-	p.log.Trace().Msgf("connect to peer %s", url.QueryEscape(string(h.PeerID[:])))
 
 	go func() {
 		for {
