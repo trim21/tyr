@@ -24,25 +24,15 @@ import (
 )
 
 func New(conn io.ReadWriteCloser, infoHash [20]byte, pieceNum uint32, addr string) *Peer {
-	ctx, cancel := context.WithCancel(context.Background())
-	p := &Peer{
-		ctx:       ctx,
-		log:       log.With().Hex("info_hash", infoHash[:]).Str("addr", addr).Logger(),
-		m:         sync.Mutex{},
-		Conn:      conn,
-		InfoHash:  infoHash,
-		bitmapLen: util.BitmapLen(pieceNum),
-		requests:  xsync.MapOf[req.Request, empty.Empty]{},
-	}
-	p.cancel = func() {
-		p.dead.Store(true)
-		cancel()
-	}
-	go p.start(true)
-	return p
+
+	return newPeer(conn, infoHash, pieceNum, addr, true)
 }
 
 func NewIncoming(conn io.ReadWriteCloser, infoHash [20]byte, pieceNum uint32, addr string) *Peer {
+	return newPeer(conn, infoHash, pieceNum, addr, false)
+}
+
+func newPeer(conn io.ReadWriteCloser, infoHash [20]byte, pieceNum uint32, addr string, skipHandshake bool) *Peer {
 	ctx, cancel := context.WithCancel(context.Background())
 	p := &Peer{
 		ctx:       ctx,
@@ -57,7 +47,7 @@ func NewIncoming(conn io.ReadWriteCloser, infoHash [20]byte, pieceNum uint32, ad
 		p.dead.Store(true)
 		cancel()
 	}
-	go p.start(false)
+	go p.start(skipHandshake)
 	return p
 }
 
