@@ -8,6 +8,10 @@ import (
 	"github.com/samber/lo"
 )
 
-var Pool = lo.Must(ants.NewPool(20, ants.WithPreAlloc(true), ants.WithPanicHandler(func(r any) {
+func logPanic(r any) {
 	log.Error().Any("panic", r).Msg("panic in execute pool")
-})))
+}
+
+var Pool = pool{
+	pool: lo.Must(ants.NewPool(20, ants.WithPreAlloc(true), ants.WithPanicHandler(logPanic))),
+}

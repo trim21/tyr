@@ -23,10 +23,11 @@ func (c *Client) Start() error {
 	if log.Trace().Enabled() {
 		go func() {
 			for {
-				time.Sleep(5 * time.Second)
+				time.Sleep(time.Second * 5)
 				fmt.Println("goroutine count", runtime.NumGoroutine())
 				fmt.Println("connection count", c.connectionCount.Load())
 				c.m.RLock()
+				fmt.Println("show downloads")
 				for _, d := range c.downloads {
 					fmt.Println(d.Display())
 				}
@@ -37,7 +38,7 @@ func (c *Client) Start() error {
 
 	go func() {
 		for {
-			time.Sleep(time.Second * 5)
+			time.Sleep(time.Minute * 10)
 			c.m.RLock()
 			log.Info().Msg("save session")
 			err := c.saveSession()
@@ -45,29 +46,31 @@ func (c *Client) Start() error {
 			if err != nil {
 				fmt.Println(string(err.Stack))
 			}
-			time.Sleep(time.Minute * 20)
 		}
 	}()
 
-	go func() {
-		log.Info().Msgf("using peer id prefix '%s'", global.PeerIDPrefix)
-		for {
-			time.Sleep(time.Second)
-			c.m.RLock()
-			for _, d := range c.downloads {
-				if !(d.state == Uploading || d.state == Downloading) {
-					continue
-				}
-
-				if d.CouldAnnounce() {
-					_ = global.Pool.Submit(func() {
-						d.AsyncAnnounce(c.http)
-					})
-				}
-			}
-			c.m.RUnlock()
-		}
-	}()
+	//go func() {
+	//	log.Info().Msgf("using peer id prefix '%s'", global.PeerIDPrefix)
+	//	for {
+	//		time.Sleep(time.Second)
+	//		c.m.RLock()
+	//		for _, d := range c.downloads {
+	//			d.m.RLock()
+	//			if !(d.state == Uploading || d.state == Downloading) {
+	//				d.m.RUnlock()
+	//				continue
+	//			}
+	//			d.m.RUnlock()
+	//
+	//			if d.CouldAnnounce() {
+	//				global.Pool.Submit(func() {
+	//					d.AsyncAnnounce(c.http)
+	//				})
+	//			}
+	//		}
+	//		c.m.RUnlock()
+	//	}
+	//}()
 
 	return nil
 }
@@ -91,7 +94,6 @@ func (c *Client) startListen() error {
 			}
 
 			c.connectionCount.Add(1)
-
 			if c.mseDisabled {
 				c.connChan <- incomingConn{
 					addr: conn.RemoteAddr().String(),
@@ -101,22 +103,24 @@ func (c *Client) startListen() error {
 			}
 
 			// handle mse
-			c.m.RLock()
-			keys := maps.Keys(c.downloadMap)
-			c.m.RUnlock()
+			global.Pool.Submit(func() {
+				c.m.RLock()
+				keys := maps.Keys(c.downloadMap)
+				c.m.RUnlock()
 
-			rwc, err := mse.NewAccept(conn, keys, mse.PreferCrypto)
-			if err != nil {
-				c.connectionCount.Sub(1)
-				c.sem.Release(1)
-				c.connectionCount.Sub(1)
-				continue
-			}
+				rwc, err := mse.NewAccept(conn, keys, c.mseSelector)
+				if err != nil {
+					c.connectionCount.Sub(1)
+					c.sem.Release(1)
+					c.connectionCount.Sub(1)
+					return
+				}
 
-			c.connChan <- incomingConn{
-				addr: conn.RemoteAddr().String(),
-				conn: rwc,
-			}
+				c.connChan <- incomingConn{
+					addr: conn.RemoteAddr().String(),
+					conn: rwc,
+				}
+			})
 		}
 	}()
 	return nil

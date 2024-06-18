@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/netip"
@@ -34,65 +35,46 @@ const Moving State = 3
 const Error State = 4
 
 type Download struct {
-	m sync.RWMutex
-
-	log zerolog.Logger
-
-	c *Client
-
-	// a "good" name for directory
-	basePath string
-
-	tags []string
-
-	meta        metainfo.MetaInfo
-	info        metainfo.Info
-	infoHash    metainfo.Hash
-	totalLength int64
-
-	ioDown *flowrate.Monitor
-	ioUp   *flowrate.Monitor
-
-	bm         bm.Bitmap
-	downloaded atomic.Int64
-	done       atomic.Bool
-	uploaded   atomic.Int64
-	completed  atomic.Int64
-
-	checkProgress atomic.Int64
-
-	peerID peer.ID
-
-	pieceInfo []pieceInfo
-	numPieces uint32
-
-	uploadAtStart   int64
-	downloadAtStart int64
-
-	resChan chan req.Response
-
-	announcePending stdSync.Bool
-
-	key string
-
-	downloadDir string
-	state       State
-	private     bool
-	trackers    []TrackerTier
-	// announce response
-
-	peersMutex sync.RWMutex
-	peers      []netip.AddrPort
-
-	connMutex sync.RWMutex
-	conn      *xsync.MapOf[string, *peer.Peer]
-
+	ctx               context.Context
+	cancel            context.CancelFunc
+	info              metainfo.Info
+	meta              metainfo.MetaInfo
+	log               zerolog.Logger
+	err               error
+	cond              *sync.Cond
+	c                 *Client
+	ioDown            *flowrate.Monitor
+	ioUp              *flowrate.Monitor
+	resChan           chan req.Response
+	conn              *xsync.MapOf[string, *peer.Peer]
 	connectionHistory *xsync.MapOf[string, connHistory]
-
-	trackerTier int
-	// if this torrent is initialized
-	lazyInitialized atomic.Bool
-	err             error
+	basePath          string
+	key               string
+	downloadDir       string
+	tags              []string
+	pieceInfo         []pieceInfo
+	trackers          []TrackerTier
+	peers             []netip.AddrPort
+	bm                bm.Bitmap
+	totalLength       int64
+	downloaded        atomic.Int64
+	done              atomic.Bool
+	uploaded          atomic.Int64
+	completed         atomic.Int64
+	checkProgress     atomic.Int64
+	uploadAtStart     int64
+	downloadAtStart   int64
+	trackerTier       int
+	lazyInitialized   atomic.Bool
+	m                 sync.RWMutex
+	peersMutex        sync.RWMutex
+	connMutex         sync.RWMutex
+	numPieces         uint32
+	announcePending   stdSync.Bool
+	infoHash          metainfo.Hash
+	peerID            peer.ID
+	state             State
+	private           bool
 }
 
 func (c *Client) NewDownload(m *metainfo.MetaInfo, info metainfo.Info, basePath string, tags []string) *Download {
@@ -101,8 +83,12 @@ func (c *Client) NewDownload(m *metainfo.MetaInfo, info metainfo.Info, basePath 
 		private = *info.Private
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	var infoHash = m.HashInfoBytes()
 	d := &Download{
+		ctx:      ctx,
+		cancel:   cancel,
 		meta:     *m,
 		c:        c,
 		log:      log.With().Hex("info_hash", infoHash.Bytes()).Logger(),
@@ -130,26 +116,13 @@ func (c *Client) NewDownload(m *metainfo.MetaInfo, info metainfo.Info, basePath 
 		downloadDir: basePath,
 	}
 
+	d.cond = sync.NewCond(&d.m)
+
 	assert.Equal(uint32(len(d.pieceInfo)), d.numPieces)
 
 	d.setAnnounceList(m)
 
 	return d
-}
-func (d *Download) Start() {
-	d.m.Lock()
-	if d.done.Load() {
-		d.state = Uploading
-	} else {
-		d.state = Downloading
-	}
-	d.m.Unlock()
-}
-
-func (d *Download) Stop() {
-	d.m.Lock()
-	d.state = Stopped
-	d.m.Unlock()
 }
 
 func (d *Download) Move(target string) error {
@@ -158,8 +131,16 @@ func (d *Download) Move(target string) error {
 
 func (d *Download) Display() string {
 	d.m.RLock()
-	d.m.RUnlock()
-	return fmt.Sprintf("%.20s | %.2f%%", d.info.Name, float64(d.completed.Load())/float64(d.totalLength)*100.0)
+	defer d.m.RUnlock()
+	return fmt.Sprintf("%s | %.20s | %.2f%%", d.state, d.info.Name, float64(d.completed.Load())/float64(d.totalLength)*100.0)
+}
+
+// if download encounter an error must stop downloading/uploading
+func (d *Download) setError(err error) {
+	d.m.Lock()
+	d.err = err
+	d.state = Error
+	d.m.Unlock()
 }
 
 func canonicalName(info metainfo.Info, infoHash torrent.InfoHash) string {

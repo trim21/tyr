@@ -38,5 +38,4 @@ tasks:
     cmds:
       - cp dist/tyr.exe dist/server.exe
       - ./dist/server.exe --web 127.0.0.1:8002 --config-file ./config.toml
-
-  lint: golangci-lint run
+#  lint: golangci-lint run

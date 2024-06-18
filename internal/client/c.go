@@ -12,13 +12,13 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
 	"github.com/go-resty/resty/v2"
-	"github.com/samber/lo"
 	"go.uber.org/atomic"
 	"golang.org/x/sync/semaphore"
 
 	"tyr/internal/config"
 	imse "tyr/internal/mse"
 	"tyr/internal/pkg/global"
+	"tyr/internal/pkg/gslice"
 )
 
 func New(cfg config.Config, sessionPath string) *Client {
@@ -64,31 +64,27 @@ func New(cfg config.Config, sessionPath string) *Client {
 }
 
 type incomingConn struct {
-	addr string
 	conn io.ReadWriteCloser
+	addr string
 }
 
 type Client struct {
-	http        *resty.Client
-	ctx         context.Context
-	cancel      context.CancelFunc
-	downloads   []*Download
-	downloadMap map[metainfo.Hash]*Download
-	mseKeys     mse.SecretKeyIter
-	Config      config.Config
-	m           sync.RWMutex
-	connChan    chan incomingConn
-
-	checkQueueLock sync.Mutex
-	checkQueue     []metainfo.Hash
-
+	ctx             context.Context
+	http            *resty.Client
+	cancel          context.CancelFunc
+	downloadMap     map[metainfo.Hash]*Download
+	mseKeys         mse.SecretKeyIter
+	connChan        chan incomingConn
 	sem             *semaphore.Weighted
+	mseSelector     mse.CryptoSelector
+	sessionPath     string
+	downloads       []*Download
+	checkQueue      []metainfo.Hash
+	Config          config.Config
 	connectionCount atomic.Uint32
-
-	mseSelector mse.CryptoSelector
-	mseDisabled bool
-
-	sessionPath string
+	m               sync.RWMutex
+	checkQueueLock  sync.Mutex
+	mseDisabled     bool
 }
 
 func (c *Client) AddTorrent(m *metainfo.MetaInfo, info metainfo.Info, downloadPath string, tags []string) error {
@@ -105,10 +101,10 @@ func (c *Client) AddTorrent(m *metainfo.MetaInfo, info metainfo.Info, downloadPa
 
 	d := c.NewDownload(m, info, downloadPath, tags)
 
-	lo.Must0(global.Pool.Submit(d.Init))
-
 	c.downloads = append(c.downloads, d)
 	c.downloadMap[infoHash] = d
+
+	global.Pool.Submit(d.Init)
 
 	return nil
 }
@@ -124,14 +120,5 @@ func (c *Client) checkComplete(d *Download) {
 	c.m.Lock()
 	defer c.m.Unlock()
 
-	remove(c.checkQueue, d.infoHash)
-}
-
-func remove[T comparable](l []T, item T) []T {
-	for i, other := range l {
-		if other == item {
-			return append(l[:i], l[i+1:]...)
-		}
-	}
-	return l
+	c.checkQueue = gslice.Remove(c.checkQueue, d.infoHash)
 }

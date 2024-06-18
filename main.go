@@ -147,7 +147,6 @@ func main() {
 		syscall.SIGHUP,
 		syscall.SIGINT,
 		syscall.SIGQUIT,
-		syscall.SIGKILL,
 		syscall.SIGTERM,
 	)
 

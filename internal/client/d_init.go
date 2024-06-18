@@ -22,25 +22,8 @@ type existingFile struct {
 	size  int64
 }
 
-// Init check existing files
-func (d *Download) Init() {
-	err := d.init()
-	if err != nil {
-		d.setError(err)
-		d.log.Err(err).Msg("failed to init torrent data")
-		return
-	}
-}
-
-func (d *Download) setError(err error) {
-	d.m.RLock()
-	d.err = err
-	d.state = Error
-	d.m.RUnlock()
-}
-
-func (d *Download) init() error {
-	d.log.Debug().Msg("init download task")
+func (d *Download) initCheck() error {
+	d.log.Debug().Msg("initCheck download task")
 	err := os.MkdirAll(d.basePath, os.ModePerm)
 	if err != nil {
 		return err
@@ -79,7 +62,7 @@ func (d *Download) init() error {
 
 	for _, index := range h {
 		buf.Reset()
-		d.log.Debug().Msgf("should check piece %d %s", index, humanize.IBytes(uint64(d.ioDown.Status().CurRate)))
+		//d.log.Trace().Msgf("should check piece %d %s", index, humanize.IBytes(uint64(d.ioDown.Status().CurRate)))
 		piece := d.pieceInfo[index]
 		for _, chunk := range piece.fileChunks {
 			f, ok := fileOpenCache[chunk.fileIndex]
@@ -105,31 +88,29 @@ func (d *Download) init() error {
 			}
 
 			fileSeekCache[chunk.fileIndex] = chunk.offsetOfFile + chunk.length
-
-			return nil
 		}
 
-		hash := sha1.New()
-		hash.Write(buf.B[:d.info.PieceLength])
-		sum := hash.Sum(nil)
-		if bytes.Equal(sum, piece.hash) {
+		sum := sha1.Sum(buf.B[:d.info.PieceLength])
+		if bytes.Equal(sum[:], piece.hash) {
 			d.bm.Set(index)
 		}
 	}
 
 	d.log.Debug().Msgf("done size %s", humanize.IBytes(uint64(d.bm.Count())*uint64(d.info.PieceLength)))
 
-	d.m.Lock()
+	//d.m.Lock()
 	d.state = Downloading
-	d.m.Unlock()
+	//d.m.Unlock()
+	//d.cond.Broadcast()
+
+	//d.Start()
 
 	return nil
 }
 
 // update progress by bitmap
 func (d *Download) updateProgress() {
-	c := d.bm.Count()
-	d.completed.Store(int64(d.numPieces) * int64(c))
+	d.completed.Store(int64(d.numPieces) * int64(d.bm.Count()))
 }
 
 func (d *Download) filePath(i int) string {

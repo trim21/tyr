@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 
 	"github.com/anacrolix/torrent"
+	"github.com/anacrolix/torrent/metainfo"
 	"github.com/kelindar/bitmap"
 	"github.com/puzpuzpuz/xsync/v3"
 	"github.com/rs/zerolog"
@@ -23,20 +24,19 @@ import (
 	"tyr/internal/util"
 )
 
-func New(conn io.ReadWriteCloser, infoHash [20]byte, pieceNum uint32, addr string) *Peer {
-
+func New(conn io.ReadWriteCloser, infoHash metainfo.Hash, pieceNum uint32, addr string) *Peer {
 	return newPeer(conn, infoHash, pieceNum, addr, true)
 }
 
-func NewIncoming(conn io.ReadWriteCloser, infoHash [20]byte, pieceNum uint32, addr string) *Peer {
+func NewIncoming(conn io.ReadWriteCloser, infoHash metainfo.Hash, pieceNum uint32, addr string) *Peer {
 	return newPeer(conn, infoHash, pieceNum, addr, false)
 }
 
-func newPeer(conn io.ReadWriteCloser, infoHash [20]byte, pieceNum uint32, addr string, skipHandshake bool) *Peer {
+func newPeer(conn io.ReadWriteCloser, infoHash metainfo.Hash, pieceNum uint32, addr string, skipHandshake bool) *Peer {
 	ctx, cancel := context.WithCancel(context.Background())
 	p := &Peer{
 		ctx:       ctx,
-		log:       log.With().Hex("info_hash", infoHash[:]).Str("addr", addr).Logger(),
+		log:       log.With().Stringer("info_hash", infoHash).Str("addr", addr).Logger(),
 		m:         sync.Mutex{},
 		Conn:      conn,
 		InfoHash:  infoHash,
@@ -54,41 +54,29 @@ func newPeer(conn io.ReadWriteCloser, infoHash [20]byte, pieceNum uint32, addr s
 var ErrPeerSendInvalidData = errors.New("peer send invalid data")
 
 type Peer struct {
-	m sync.Mutex
-
-	dead atomic.Bool
-
-	log zerolog.Logger
-
-	resChan chan<- req.Response
-	reqChan chan req.Request
-
-	requests xsync.MapOf[req.Request, empty.Empty]
-
-	ctx    context.Context
-	cancel context.CancelFunc
-
-	Conn    io.ReadWriteCloser
-	Address string
-
-	// bitmap of connected peer
-	Bitmap    bitmap.Bitmap
-	bitmapLen uint32
-
-	// torrent metainfo
-	InfoHash torrent.InfoHash
-
+	log        zerolog.Logger
+	ctx        context.Context
+	Conn       io.ReadWriteCloser
+	resChan    chan<- req.Response
+	reqChan    chan req.Request
+	cancel     context.CancelFunc
+	requests   xsync.MapOf[req.Request, empty.Empty]
+	Address    string
+	Bitmap     bitmap.Bitmap
+	m          sync.Mutex
+	dead       atomic.Bool
+	bitmapLen  uint32
 	Choked     atomic.Bool
 	Interested atomic.Bool
+	InfoHash   torrent.InfoHash
 }
 
 type Event struct {
-	Bitmap bitmap.Bitmap
-	Res    req.Response
-	Req    req.Request
-	Event  proto.Message
-	Index  uint32
-
+	Bitmap    bitmap.Bitmap
+	Res       req.Response
+	Req       req.Request
+	Index     uint32
+	Event     proto.Message
 	keepAlive bool
 }
 

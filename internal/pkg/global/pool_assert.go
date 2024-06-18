@@ -5,12 +5,9 @@
 
 package global
 
-var Pool = debugPool{}
+import (
+	"github.com/panjf2000/ants/v2"
+	"github.com/samber/lo"
+)
 
-type debugPool struct {
-}
-
-func (p *debugPool) Submit(task func()) error {
-	go task()
-	return nil
-}
+var Pool = pool{lo.Must(ants.NewPool(20, ants.WithPreAlloc(true)))}

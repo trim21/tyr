@@ -13,11 +13,12 @@ func _() {
 	_ = x[Uploading-2]
 	_ = x[Checking-3]
 	_ = x[Moving-3]
+	_ = x[Error-4]
 }
 
-const _State_name = "DownloadingStoppedUploadingChecking"
+const _State_name = "DownloadingStoppedUploadingCheckingError"
 
-var _State_index = [...]uint8{0, 11, 18, 27, 35}
+var _State_index = [...]uint8{0, 11, 18, 27, 35, 40}
 
 func (i State) String() string {
 	if i >= State(len(_State_index)-1) {

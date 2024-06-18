@@ -20,8 +20,8 @@ import (
 type AddTorrentReq struct {
 	TorrentFile string   `json:"torrent_file" description:"base64 encoded torrent file content"`
 	DownloadDir string   `json:"download_dir" description:"base64 encoded download dir"`
-	IsBaseDir   bool     `json:"is_base_dir" description:"if true, will not append torrent name to download_dir"`
 	Tags        []string `json:"tags"`
+	IsBaseDir   bool     `json:"is_base_dir" description:"if true, will not append torrent name to download_dir"`
 }
 
 type AddTorrentRes struct {

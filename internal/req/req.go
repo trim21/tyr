@@ -6,8 +6,8 @@ type Request struct {
 	Length     uint32
 }
 
+// len(Data) should match request
 type Response struct {
-	// len(Data) should match request
 	Data       []byte
 	Begin      uint32
 	PieceIndex uint32

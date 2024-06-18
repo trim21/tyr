@@ -19,6 +19,12 @@ type Bitmap struct {
 	m  sync.RWMutex
 }
 
+func (b *Bitmap) Clear() {
+	b.m.Lock()
+	b.bm.Clear()
+	b.m.Unlock()
+}
+
 func (b *Bitmap) Count() uint32 {
 	b.m.RLock()
 	v := uint32(b.bm.GetCardinality())

@@ -1,3 +1,3 @@
-# VE
+# Tyr
 
 A BitTorrent client
