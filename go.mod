@@ -18,7 +18,7 @@ require (
 	github.com/labstack/echo/v4 v4.12.0
 	github.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f
 	github.com/negrel/assert v0.2.0
-	github.com/panjf2000/ants/v2 v2.9.1
+	github.com/panjf2000/ants/v2 v2.10.0
 	github.com/pkg/profile v1.7.0
 	github.com/puzpuzpuz/xsync/v3 v3.1.0
 	github.com/rs/zerolog v1.33.0
