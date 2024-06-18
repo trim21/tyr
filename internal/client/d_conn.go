@@ -1,83 +1,87 @@
 package client
 
 import (
+	"context"
+	"errors"
 	"io"
-	"net"
+	"net/netip"
+	"slices"
 	"time"
 
-	"github.com/rs/zerolog/log"
-
-	"tyr/internal/peer"
+	"tyr/internal/mse"
 	"tyr/internal/pkg/global"
+	"tyr/internal/proto"
 )
 
 // AddConn add an incoming connection from client listener
-func (d *Download) AddConn(addr string, conn io.ReadWriteCloser) {
+func (d *Download) AddConn(addr netip.AddrPort, conn io.ReadWriteCloser, h proto.Handshake) {
 	d.connMutex.Lock()
 	defer d.connMutex.Unlock()
 
-	d.conn.Store(addr, peer.NewIncoming(conn, d.infoHash, d.numPieces, addr))
-}
-
-func (d *Download) cleanDeadPeers() {
-	d.conn.Range(func(key string, value *peer.Peer) bool {
-		if value.Dead() {
-			d.conn.Delete(key)
-			d.c.sem.Release(1)
-			d.c.connectionCount.Add(1)
-		}
-		return true
-	})
+	d.connectionHistory.Store(addr, connHistory{})
+	d.conn.Store(addr, NewIncomingPeer(conn, d, addr, h.PeerID))
 }
 
 func (d *Download) connectToPeers() {
-	d.cleanDeadPeers()
-
 	d.peersMutex.RLock()
-	if len(d.peers) > 0 {
-		log.Trace().Msg("connectToPeers")
-	}
+	peers := slices.Clone(d.peers)
+	d.peersMutex.RUnlock()
 
-	for _, p := range d.peers {
-		a := p.String()
-		log.Trace().Msgf("check peer %s", a)
-		_, connected := d.conn.Load(a)
-
-		if connected {
-			log.Trace().Msgf("peer connected")
-			continue
-		}
-
-		h, ok := d.connectionHistory.Load(a)
-		if ok {
-			if h.lastTry.After(time.Now().Add(-time.Minute)) {
+	for _, addr := range peers {
+		if item := d.c.ch.Get(addr); item != nil {
+			ch := item.Value()
+			if ch.timeout {
+				continue
+			}
+			if ch.err != nil {
 				continue
 			}
 		}
 
-		if !d.c.sem.TryAcquire(1) {
-			break
-		}
-		d.c.connectionCount.Add(1)
+		global.Pool.Submit(func() {
+			if !d.c.sem.TryAcquire(1) {
+				return
+			}
 
-		conn, err := global.Dialer.Dial("tcp", a)
-		if err != nil {
-			d.connectionHistory.Store(a, connHistory{lastTry: time.Now()})
-			continue
-		}
-		d.connectionHistory.Store(a, connHistory{lastTry: time.Now(), connected: true})
+			d.c.connectionCount.Add(1)
 
-		log.Trace().Msgf("connected to peer %s", a)
-		d.conn.Store(a, d.peerFromConn(conn, a))
+			ch := connHistory{lastTry: time.Now()}
+			defer func(h connHistory) {
+				d.c.ch.Set(addr, h, time.Hour)
+			}(ch)
+
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+			defer cancel()
+			conn, err := global.Dialer.DialContext(ctx, "tcp", addr.String())
+			if err != nil {
+				if errors.Is(err, context.DeadlineExceeded) {
+					ch.timeout = true
+				} else {
+					ch.err = err
+				}
+				d.c.sem.Release(1)
+				d.c.connectionCount.Sub(1)
+				return
+			}
+
+			if d.c.mseDisabled {
+				d.conn.Store(addr, NewOutgoingPeer(conn, d, addr))
+				return
+			}
+
+			rwc, err := mse.NewConnection(d.infoHash.Bytes(), conn)
+			if err != nil {
+				ch.err = err
+				d.c.sem.Release(1)
+				d.c.connectionCount.Sub(1)
+				return
+			}
+
+			d.conn.Store(addr, NewOutgoingPeer(rwc, d, addr))
+		})
 	}
-
-	d.peersMutex.RUnlock()
-
-	d.peersMutex.Lock()
-	d.peers = d.peers[:0]
-	d.peersMutex.Unlock()
 }
 
-func (d *Download) peerFromConn(conn net.Conn, a string) *peer.Peer {
-	return peer.New(conn, d.infoHash, uint32(d.info.NumPieces()), a)
+func (d *Download) sendRequests() {
+	d.log.Trace().Msg("send request")
 }

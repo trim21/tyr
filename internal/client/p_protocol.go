@@ -1,4 +1,4 @@
-package peer
+package client
 
 import (
 	"encoding/binary"
@@ -7,6 +7,14 @@ import (
 
 	"tyr/internal/proto"
 )
+
+func (p *Peer) Handshake() (proto.Handshake, error) {
+	if err := proto.SendHandshake(p.Conn, p.InfoHash, NewPeerID()); err != nil {
+		return proto.Handshake{}, err
+	}
+
+	return proto.ReadHandshake(p.Conn)
+}
 
 func (p *Peer) decodeHave(l uint32) (Event, error) {
 	assert.Equal(uint32(5), l)

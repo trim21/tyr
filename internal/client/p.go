@@ -1,50 +1,86 @@
-package peer
+package client
 
 import (
 	"context"
 	"encoding/binary"
 	"errors"
 	"io"
+	"net/netip"
 	"net/url"
 	"sync"
 	"sync/atomic"
 
 	"github.com/anacrolix/torrent"
-	"github.com/anacrolix/torrent/metainfo"
-	"github.com/kelindar/bitmap"
+	"github.com/dchest/uniuri"
+	"github.com/negrel/assert"
 	"github.com/puzpuzpuz/xsync/v3"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
-	"github.com/negrel/assert"
-
+	"tyr/internal/pkg/bm"
 	"tyr/internal/pkg/empty"
+	"tyr/internal/pkg/global"
+	"tyr/internal/pkg/unsafe"
 	"tyr/internal/proto"
 	"tyr/internal/req"
 	"tyr/internal/util"
 )
 
-func New(conn io.ReadWriteCloser, infoHash metainfo.Hash, pieceNum uint32, addr string) *Peer {
-	return newPeer(conn, infoHash, pieceNum, addr, true)
+type PeerID [20]byte
+
+func (i PeerID) AsString() string {
+	return unsafe.Str(i[:])
 }
 
-func NewIncoming(conn io.ReadWriteCloser, infoHash metainfo.Hash, pieceNum uint32, addr string) *Peer {
-	return newPeer(conn, infoHash, pieceNum, addr, false)
+var emptyPeerID PeerID
+
+func (i PeerID) Zero() bool {
+	return i == emptyPeerID
 }
 
-func newPeer(conn io.ReadWriteCloser, infoHash metainfo.Hash, pieceNum uint32, addr string, skipHandshake bool) *Peer {
+var peerIDChars = []byte("0123456789abcdefghijklmnopqrstuvwxyz" +
+	"ABCDEFGHIJKLMNOPQRSTUVWXYZ!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~")
+
+func NewPeerID() (peerID PeerID) {
+	copy(peerID[:], global.PeerIDPrefix)
+	copy(peerID[8:], uniuri.NewLenCharsBytes(12, peerIDChars))
+	return
+}
+
+func NewOutgoingPeer(conn io.ReadWriteCloser, d *Download, addr netip.AddrPort) *Peer {
+	return newPeer(conn, d, addr, emptyPeerID, false)
+}
+
+func NewIncomingPeer(conn io.ReadWriteCloser, d *Download, addr netip.AddrPort, peerID PeerID) *Peer {
+	return newPeer(conn, d, addr, peerID, true)
+}
+
+func newPeer(
+	conn io.ReadWriteCloser,
+	d *Download,
+	addr netip.AddrPort,
+	peerID PeerID,
+	skipHandshake bool,
+) *Peer {
 	ctx, cancel := context.WithCancel(context.Background())
+	l := d.log.With().Stringer("addr", addr)
+	if !peerID.Zero() {
+		l = l.Str("peer_id", url.QueryEscape(peerID.AsString()))
+	}
+
 	p := &Peer{
 		ctx:       ctx,
-		log:       log.With().Stringer("info_hash", infoHash).Str("addr", addr).Logger(),
-		m:         sync.Mutex{},
+		log:       l.Logger(),
 		Conn:      conn,
-		InfoHash:  infoHash,
-		bitmapLen: util.BitmapLen(pieceNum),
+		InfoHash:  d.infoHash,
+		bitmapLen: util.BitmapLen(d.numPieces),
 		requests:  xsync.MapOf[req.Request, empty.Empty]{},
 	}
 	p.cancel = func() {
 		p.dead.Store(true)
+		d.conn.Delete(addr)
+		d.c.sem.Release(1)
+		d.c.connectionCount.Sub(1)
 		cancel()
 	}
 	go p.start(skipHandshake)
@@ -62,7 +98,7 @@ type Peer struct {
 	cancel     context.CancelFunc
 	requests   xsync.MapOf[req.Request, empty.Empty]
 	Address    string
-	Bitmap     bitmap.Bitmap
+	Bitmap     *bm.Bitmap
 	m          sync.Mutex
 	dead       atomic.Bool
 	bitmapLen  uint32
@@ -72,7 +108,7 @@ type Peer struct {
 }
 
 type Event struct {
-	Bitmap    bitmap.Bitmap
+	Bitmap    *bm.Bitmap
 	Res       req.Response
 	Req       req.Request
 	Index     uint32
@@ -81,15 +117,15 @@ type Event struct {
 }
 
 func (p *Peer) DecodeEvents() (Event, error) {
-	var b = make([]byte, 4)
-	n, err := p.Conn.Read(b)
+	var b [4]byte
+	n, err := p.Conn.Read(b[:])
 	if err != nil {
 		return Event{}, err
 	}
 
 	assert.Equal(n, 4)
 
-	l := binary.BigEndian.Uint32(b)
+	l := binary.BigEndian.Uint32(b[:])
 
 	// keep alive
 	if l == 0 {
@@ -123,15 +159,21 @@ func (p *Peer) DecodeEvents() (Event, error) {
 
 func (p *Peer) start(skipHandshake bool) {
 	defer p.cancel()
-	if !skipHandshake {
+	if skipHandshake {
+		if proto.SendHandshake(p.Conn, p.InfoHash, NewPeerID()) != nil {
+			return
+		}
+	} else {
 		h, err := p.Handshake()
 		if err != nil {
+			return
 		}
 		if h.InfoHash != p.InfoHash {
 			p.log.Trace().Msgf("peer info hash mismatch %x", h.InfoHash)
 			return
 		}
-		p.log.Trace().Msgf("connect to peer %s", url.QueryEscape(string(h.PeerID[:])))
+		p.log = p.log.With().Str("peer_id", url.QueryEscape(string(h.PeerID[:]))).Logger()
+		p.log.Trace().Msg("connect to peer")
 	}
 
 	go func() {
@@ -169,7 +211,7 @@ func (p *Peer) start(skipHandshake bool) {
 
 		switch event.Event {
 		case proto.Bitfield:
-			p.Bitmap.Xor(event.Bitmap)
+			p.Bitmap.XOR(event.Bitmap)
 		case proto.Have:
 			p.Bitmap.Set(event.Index)
 		case proto.Interested:
@@ -227,4 +269,24 @@ func (p *Peer) validateRes(res req.Response) bool {
 
 func (p *Peer) Dead() bool {
 	return p.dead.Load()
+}
+
+func (p *Peer) decodeBitfield(l uint32) (Event, error) {
+	if l != p.bitmapLen {
+		return Event{}, ErrPeerSendInvalidData
+	}
+
+	var b = make([]byte, l-1)
+	n, err := p.Conn.Read(b)
+	if err != nil {
+		return Event{}, err
+	}
+
+	log.Trace().Msgf("receive bitfield payload length %d", l-1)
+
+	assert.Equal(n, int(l-1))
+
+	bm := util.BitmapFromChunked(b)
+
+	return Event{Event: proto.Bitfield, Bitmap: bm}, err
 }

@@ -11,12 +11,14 @@ import (
 	"time"
 
 	"github.com/anacrolix/torrent/metainfo"
+	"github.com/go-resty/resty/v2"
 	"github.com/rs/zerolog/log"
 	"github.com/samber/lo"
 	"github.com/trim21/errgo"
 	"github.com/valyala/bytebufferpool"
 	"github.com/zeebo/bencode"
 
+	"tyr/internal/pkg/global"
 	"tyr/internal/pkg/null"
 )
 
@@ -26,35 +28,34 @@ const EventStopped = "stopped"
 
 func (d *Download) TryAnnounce() {
 	if !d.announcePending.Load() {
-		d.AsyncAnnounce()
+		d.AsyncAnnounce("")
 		return
 	}
 }
 
-func (d *Download) AsyncAnnounce() {
-	d.asyncAnnounce()
+func (d *Download) AsyncAnnounce(event string) {
+	d.asyncAnnounce(event)
 	d.connectToPeers()
+	global.Pool.Submit(d.sendRequests)
 }
 
-// TODO: enable announcing to all tier by config
-func (d *Download) asyncAnnounce() {
+func (d *Download) asyncAnnounce(event string) {
 	d.announcePending.Store(true)
 	defer d.announcePending.Store(false)
 
-	// TODO: all level tracker announce
+	// TODO: do all level tracker announce by config
 	for _, tier := range d.trackers {
-		r, err := tier.Announce(d)
+		r, err := tier.Announce(d, event)
 		if err != nil {
 			continue
 		}
 		if len(r.Peers) != 0 {
 			d.peersMutex.Lock()
 			d.peers = append(d.peers, r.Peers...)
-			d.peers = lo.UniqBy(d.peers, func(item netip.AddrPort) string {
-				return item.String()
-			})
+			d.peers = lo.Uniq(d.peers)
 			d.peersMutex.Unlock()
 		}
+		return
 	}
 }
 
@@ -62,14 +63,14 @@ type TrackerTier struct {
 	trackers []*Tracker
 }
 
-func (tier TrackerTier) Announce(d *Download) (AnnounceResult, error) {
-	return AnnounceResult{}, nil
-}
-
-func (tier TrackerTier) announce(d *Download, event string) (AnnounceResult, error) {
-	now := time.Now()
+func (tier TrackerTier) Announce(d *Download, event string) (AnnounceResult, error) {
 	for _, t := range tier.trackers {
-		if !now.After(t.nextAnnounce) {
+		if event == EventStarted {
+			_ = t.announceStop(d)
+			return AnnounceResult{}, nil
+		}
+
+		if !time.Now().After(t.nextAnnounce) {
 			return AnnounceResult{}, nil
 		}
 
@@ -87,6 +88,9 @@ func (tier TrackerTier) announce(d *Download, event string) (AnnounceResult, err
 			t.Unlock()
 			return AnnounceResult{}, nil
 		}
+		t.Lock()
+		t.peerCount = len(r.Peers)
+		t.Unlock()
 
 		r.Peers = lo.Uniq(r.Peers)
 
@@ -152,21 +156,30 @@ type Tracker struct {
 	nextAnnounce     time.Time
 	err              error
 	url              string
+	peerCount        int
+}
+
+func (t *Tracker) req(d *Download) *resty.Request {
+	return d.c.http.R().
+		SetQueryParam("info_hash", d.infoHash.AsString()).
+		SetQueryParam("peer_id", d.peerID.AsString()).
+		SetQueryParam("port", strconv.FormatUint(uint64(d.c.Config.App.P2PPort), 10)).
+		SetQueryParam("compat", "1").
+		SetQueryParam("uploaded", strconv.FormatInt(d.uploaded.Load()-d.uploadAtStart, 10)).
+		SetQueryParam("downloaded", strconv.FormatInt(d.downloaded.Load()-d.downloadAtStart, 10)).
+		SetQueryParam("left", strconv.FormatInt(d.totalLength-d.completed.Load(), 10))
 }
 
 func (t *Tracker) announce(d *Download, event string) (AnnounceResult, error) {
 	d.log.Trace().Str("url", t.url).Msg("announce to tracker")
 
-	res, err := d.c.http.R().
-		SetQueryParam("info_hash", d.infoHash.AsString()).
-		SetQueryParam("peer_id", d.peerID.AsString()).
-		SetQueryParam("port", strconv.FormatUint(uint64(d.c.Config.App.P2PPort), 10)).
-		SetQueryParam("compat", "1").
-		SetQueryParam("event", event).
-		SetQueryParam("uploaded", strconv.FormatInt(d.uploaded.Load()-d.uploadAtStart, 10)).
-		SetQueryParam("downloaded", strconv.FormatInt(d.downloaded.Load()-d.downloadAtStart, 10)).
-		SetQueryParam("left", strconv.FormatInt(d.totalLength-d.completed.Load(), 10)).
-		Get(t.url)
+	req := t.req(d)
+
+	if event != "" {
+		req = req.SetQueryParam("event", event)
+	}
+
+	res, err := req.Get(t.url)
 	if err != nil {
 		return AnnounceResult{}, errgo.Wrap(err, "failed to connect to tracker")
 	}
@@ -178,12 +191,15 @@ func (t *Tracker) announce(d *Download, event string) (AnnounceResult, error) {
 		return AnnounceResult{}, errgo.Wrap(err, "failed to parse torrent announce response")
 	}
 
+	//fmt.Println("t" res.String())
+
 	if r.FailureReason.Set {
 		return AnnounceResult{FailedReason: r.FailureReason}, nil
 	}
 
 	var result = AnnounceResult{
 		Interval: time.Minute * 30,
+		//Interval: time.Second * 10,
 	}
 
 	if r.Interval.Set {
@@ -246,15 +262,8 @@ func (t *Tracker) announce(d *Download, event string) (AnnounceResult, error) {
 func (t *Tracker) announceStop(d *Download) error {
 	d.log.Trace().Str("url", t.url).Msg("announce to tracker")
 
-	_, err := d.c.http.R().
-		SetQueryParam("info_hash", d.infoHash.AsString()).
-		SetQueryParam("peer_id", d.peerID.AsString()).
-		SetQueryParam("port", strconv.FormatUint(uint64(d.c.Config.App.P2PPort), 10)).
-		SetQueryParam("compat", "1").
+	_, err := t.req(d).
 		SetQueryParam("event", EventStopped).
-		SetQueryParam("uploaded", strconv.FormatInt(d.uploaded.Load()-d.uploadAtStart, 10)).
-		SetQueryParam("downloaded", strconv.FormatInt(d.downloaded.Load()-d.downloadAtStart, 10)).
-		SetQueryParam("left", strconv.FormatInt(d.totalLength-d.completed.Load(), 10)).
 		Get(t.url)
 	if err != nil {
 		return errgo.Wrap(err, "failed to parse torrent announce response")

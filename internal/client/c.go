@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/netip"
 	"sync"
 	"time"
 
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
 	"github.com/go-resty/resty/v2"
+	"github.com/jellydator/ttlcache/v3"
 	"go.uber.org/atomic"
 	"golang.org/x/sync/semaphore"
 
@@ -47,11 +49,10 @@ func New(cfg config.Config, sessionPath string) *Client {
 	}
 
 	return &Client{
-		Config: cfg,
-		ctx:    ctx,
-		cancel: cancel,
-		// key is info hash raw bytes as string
-		// it's not info hash hex string
+		Config:      cfg,
+		ctx:         ctx,
+		cancel:      cancel,
+		ch:          ttlcache.New[netip.AddrPort, connHistory](),
 		sem:         semaphore.NewWeighted(int64(cfg.App.PeersLimit)),
 		checkQueue:  make([]metainfo.Hash, 0, 10),
 		downloadMap: make(map[metainfo.Hash]*Download),
@@ -65,7 +66,7 @@ func New(cfg config.Config, sessionPath string) *Client {
 
 type incomingConn struct {
 	conn io.ReadWriteCloser
-	addr string
+	addr netip.AddrPort
 }
 
 type Client struct {
@@ -77,6 +78,7 @@ type Client struct {
 	connChan        chan incomingConn
 	sem             *semaphore.Weighted
 	mseSelector     mse.CryptoSelector
+	ch              *ttlcache.Cache[netip.AddrPort, connHistory]
 	sessionPath     string
 	downloads       []*Download
 	checkQueue      []metainfo.Hash

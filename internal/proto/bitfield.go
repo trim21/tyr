@@ -4,12 +4,11 @@ import (
 	"encoding/binary"
 	"io"
 
-	"github.com/kelindar/bitmap"
-
+	"tyr/internal/pkg/bm"
 	"tyr/internal/util"
 )
 
-func NewBitfield(conn io.Writer, bm bitmap.Bitmap, piecesLen int) error {
+func NewBitfield(conn io.Writer, bm *bm.Bitmap, piecesLen int) error {
 	chunked := util.BitmapToChunked(bm, piecesLen)
 
 	err := binary.Write(conn, binary.BigEndian, uint32(1+len(chunked)))

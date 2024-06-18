@@ -17,9 +17,9 @@ import (
 	"github.com/puzpuzpuz/xsync/v3"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/valyala/bytebufferpool"
 	"go.uber.org/atomic"
 
-	"tyr/internal/peer"
 	"tyr/internal/pkg/bm"
 	"tyr/internal/req"
 )
@@ -46,8 +46,8 @@ type Download struct {
 	ioDown            *flowrate.Monitor
 	ioUp              *flowrate.Monitor
 	resChan           chan req.Response
-	conn              *xsync.MapOf[string, *peer.Peer]
-	connectionHistory *xsync.MapOf[string, connHistory]
+	conn              *xsync.MapOf[netip.AddrPort, *Peer]
+	connectionHistory *xsync.MapOf[netip.AddrPort, connHistory]
 	basePath          string
 	key               string
 	downloadDir       string
@@ -72,7 +72,7 @@ type Download struct {
 	numPieces         uint32
 	announcePending   stdSync.Bool
 	infoHash          metainfo.Hash
-	peerID            peer.ID
+	peerID            PeerID
 	state             State
 	private           bool
 }
@@ -93,7 +93,7 @@ func (c *Client) NewDownload(m *metainfo.MetaInfo, info metainfo.Info, basePath 
 		c:        c,
 		log:      log.With().Hex("info_hash", infoHash.Bytes()).Logger(),
 		state:    Checking,
-		peerID:   peer.NewID(),
+		peerID:   NewPeerID(),
 		tags:     tags,
 		basePath: basePath,
 
@@ -103,8 +103,8 @@ func (c *Client) NewDownload(m *metainfo.MetaInfo, info metainfo.Info, basePath 
 		totalLength:       info.TotalLength(),
 		info:              info,
 		infoHash:          infoHash,
-		conn:              xsync.NewMapOf[string, *peer.Peer](),
-		connectionHistory: xsync.NewMapOf[string, connHistory](),
+		conn:              xsync.NewMapOf[netip.AddrPort, *Peer](),
+		connectionHistory: xsync.NewMapOf[netip.AddrPort, connHistory](),
 
 		pieceInfo: buildPieceInfos(info),
 		numPieces: uint32(info.NumPieces()),
@@ -132,7 +132,20 @@ func (d *Download) Move(target string) error {
 func (d *Download) Display() string {
 	d.m.RLock()
 	defer d.m.RUnlock()
-	return fmt.Sprintf("%s | %.20s | %.2f%%", d.state, d.info.Name, float64(d.completed.Load())/float64(d.totalLength)*100.0)
+	buf := bytebufferpool.Get()
+	defer bytebufferpool.Put(buf)
+	_, _ = fmt.Fprintf(buf, "%s | %.20s | %.2f%%", d.state, d.info.Name, float64(d.completed.Load())/float64(d.totalLength)*100.0)
+	for _, tier := range d.trackers {
+		for _, t := range tier.trackers {
+			t.RLock()
+			fmt.Fprintf(buf, "\n%s %d", t.url, t.peerCount)
+			if t.err != nil {
+				_, _ = fmt.Fprintf(buf, " | %s", t.err)
+			}
+			t.RUnlock()
+		}
+	}
+	return buf.String()
 }
 
 // if download encounter an error must stop downloading/uploading
@@ -167,5 +180,7 @@ func canonicalName(info metainfo.Info, infoHash torrent.InfoHash) string {
 
 type connHistory struct {
 	lastTry   time.Time
+	timeout   bool
 	connected bool
+	err       error
 }

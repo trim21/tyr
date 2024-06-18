@@ -1,7 +1,7 @@
 package proto
 
 import (
-	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -10,8 +10,7 @@ import (
 	"github.com/negrel/assert"
 )
 
-const HandshakePstrV1 = "BitTorrent protocol"
-const HandshakePstrLen = byte(len(HandshakePstrV1))
+var handshakePstrV1 = []byte("\x19BitTorrent protocol")
 
 var HandshakeReserved = []byte{0, 0, 0, 0, 0, 0, 0, 0}
 
@@ -24,19 +23,23 @@ var HandshakeReserved = []byte{0, 0, 0, 0, 0, 0, 0, 0}
 //
 // Total length = payload length = 49 + len(pstr) = 68 bytes (for BitTorrent v1)
 func SendHandshake(conn io.Writer, infoHash, peerID [20]byte) error {
-	c := bufio.NewWriter(conn)
+	_, err := conn.Write(handshakePstrV1)
+	if err != nil {
+		return err
+	}
 
-	c.WriteByte(HandshakePstrLen)
+	_, err = conn.Write(HandshakeReserved)
+	if err != nil {
+		return err
+	}
 
-	c.WriteString(HandshakePstrV1)
+	_, err = conn.Write(infoHash[:])
+	if err != nil {
+		return err
+	}
 
-	// reserved
-	c.Write(HandshakeReserved)
-
-	c.Write(infoHash[:])
-	c.Write(peerID[:])
-
-	return c.Flush()
+	_, err = conn.Write(peerID[:])
+	return err
 }
 
 type Handshake struct {
@@ -51,29 +54,19 @@ func (h Handshake) GoString() string {
 var ErrHandshakeMismatch = errors.New("handshake string mismatch")
 
 func ReadHandshake(conn io.Reader) (Handshake, error) {
-	var b = make([]byte, 1)
-	n, err := conn.Read(b)
+	var b = make([]byte, 20)
+	n, err := io.ReadFull(conn, b)
 	if err != nil {
 		return Handshake{}, err
 	}
 
-	assert.Equal(1, n)
+	assert.Equal(20, n)
 
-	l := b[0]
-
-	b = make([]byte, l)
-	n, err = conn.Read(b)
-	if err != nil {
-		return Handshake{}, err
-	}
-
-	assert.Equal(n, int(HandshakePstrLen))
-
-	if string(b) != HandshakePstrV1 {
+	if !bytes.Equal(b, handshakePstrV1) {
 		return Handshake{}, ErrHandshakeMismatch
 	}
 
-	n, err = conn.Read(b[:8])
+	n, err = io.ReadFull(conn, b[:8])
 	if err != nil {
 		return Handshake{}, err
 	}

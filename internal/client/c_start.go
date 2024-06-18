@@ -3,10 +3,12 @@ package client
 import (
 	"fmt"
 	"net"
+	"net/netip"
 	"runtime"
 	"time"
 
 	"github.com/rs/zerolog/log"
+	"github.com/samber/lo"
 	"github.com/trim21/errgo"
 	"golang.org/x/exp/maps"
 
@@ -19,6 +21,8 @@ func (c *Client) Start() error {
 	if err := c.startListen(); err != nil {
 		return err
 	}
+
+	go c.ch.Start()
 
 	if log.Trace().Enabled() {
 		go func() {
@@ -96,7 +100,7 @@ func (c *Client) startListen() error {
 			c.connectionCount.Add(1)
 			if c.mseDisabled {
 				c.connChan <- incomingConn{
-					addr: conn.RemoteAddr().String(),
+					addr: lo.Must(netip.ParseAddrPort(conn.RemoteAddr().String())),
 					conn: conn,
 				}
 				continue
@@ -117,7 +121,7 @@ func (c *Client) startListen() error {
 				}
 
 				c.connChan <- incomingConn{
-					addr: conn.RemoteAddr().String(),
+					addr: lo.Must(netip.ParseAddrPort(conn.RemoteAddr().String())),
 					conn: rwc,
 				}
 			})
@@ -151,7 +155,7 @@ func (c *Client) handleConn() {
 					return
 				}
 
-				d.AddConn(conn.addr, conn.conn)
+				d.AddConn(conn.addr, conn.conn, h)
 			})
 			continue
 		}
