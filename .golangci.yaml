@@ -46,6 +46,7 @@ linters:
   # See the dedicated "linters" documentation section.
   enable:
     - govet
+    - exhaustive
 
   disable:
     - errcheck

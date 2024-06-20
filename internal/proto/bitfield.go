@@ -5,23 +5,23 @@ import (
 	"io"
 
 	"tyr/internal/pkg/bm"
-	"tyr/internal/util"
 )
 
-func NewBitfield(conn io.Writer, bm *bm.Bitmap, piecesLen int) error {
-	chunked := util.BitmapToChunked(bm, piecesLen)
-
-	err := binary.Write(conn, binary.BigEndian, uint32(1+len(chunked)))
+func SendBitfield(conn io.Writer, bm *bm.Bitmap, size uint32) error {
+	err := binary.Write(conn, binary.BigEndian, 1+size)
 	if err != nil {
 		return err
 	}
 
 	_, err = conn.Write([]byte{byte(Bitfield)})
+
 	if err != nil {
 		return err
 	}
 
-	_, err = conn.Write(chunked)
+	b := bm.Bitfield(size)
+
+	_, err = conn.Write(b[:size])
 
 	return err
 }

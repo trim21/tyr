@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
+	"net"
 	"net/http"
 	"net/netip"
 	"sync"
@@ -15,6 +15,7 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/jellydator/ttlcache/v3"
 	"go.uber.org/atomic"
+	"golang.org/x/exp/maps"
 	"golang.org/x/sync/semaphore"
 
 	"tyr/internal/config"
@@ -49,12 +50,13 @@ func New(cfg config.Config, sessionPath string) *Client {
 	}
 
 	return &Client{
-		Config:      cfg,
-		ctx:         ctx,
-		cancel:      cancel,
-		ch:          ttlcache.New[netip.AddrPort, connHistory](),
-		sem:         semaphore.NewWeighted(int64(cfg.App.PeersLimit)),
-		checkQueue:  make([]metainfo.Hash, 0, 10),
+		Config: cfg,
+		ctx:    ctx,
+		cancel: cancel,
+		ch:     ttlcache.New[netip.AddrPort, connHistory](),
+		//sem:    semaphore.NewWeighted(int64(cfg.App.PeersLimit)),
+		sem:         semaphore.NewWeighted(50),
+		checkQueue:  make([]metainfo.Hash, 0, 3),
 		downloadMap: make(map[metainfo.Hash]*Download),
 		connChan:    make(chan incomingConn, 1),
 		http:        resty.NewWithClient(hc).SetHeader("User-Agent", global.UserAgent),
@@ -65,7 +67,7 @@ func New(cfg config.Config, sessionPath string) *Client {
 }
 
 type incomingConn struct {
-	conn io.ReadWriteCloser
+	conn net.Conn
 	addr netip.AddrPort
 }
 
@@ -74,6 +76,7 @@ type Client struct {
 	http            *resty.Client
 	cancel          context.CancelFunc
 	downloadMap     map[metainfo.Hash]*Download
+	infoHashes      []metainfo.Hash
 	mseKeys         mse.SecretKeyIter
 	connChan        chan incomingConn
 	sem             *semaphore.Weighted
@@ -105,6 +108,7 @@ func (c *Client) AddTorrent(m *metainfo.MetaInfo, info metainfo.Info, downloadPa
 
 	c.downloads = append(c.downloads, d)
 	c.downloadMap[infoHash] = d
+	c.infoHashes = maps.Keys(c.downloadMap)
 
 	global.Pool.Submit(d.Init)
 
@@ -115,12 +119,12 @@ func (c *Client) addCheck(d *Download) {
 	c.m.Lock()
 	defer c.m.Unlock()
 
-	c.checkQueue = append(c.checkQueue, d.infoHash)
+	c.checkQueue = append(c.checkQueue, d.hash)
 }
 
 func (c *Client) checkComplete(d *Download) {
 	c.m.Lock()
 	defer c.m.Unlock()
 
-	c.checkQueue = gslice.Remove(c.checkQueue, d.infoHash)
+	c.checkQueue = gslice.Remove(c.checkQueue, d.hash)
 }

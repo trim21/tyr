@@ -3,7 +3,7 @@ package client
 import (
 	"context"
 	"errors"
-	"io"
+	"net"
 	"net/netip"
 	"slices"
 	"time"
@@ -14,10 +14,9 @@ import (
 )
 
 // AddConn add an incoming connection from client listener
-func (d *Download) AddConn(addr netip.AddrPort, conn io.ReadWriteCloser, h proto.Handshake) {
-	d.connMutex.Lock()
-	defer d.connMutex.Unlock()
-
+func (d *Download) AddConn(addr netip.AddrPort, conn net.Conn, h proto.Handshake) {
+	//d.connMutex.Lock()
+	//defer d.connMutex.Unlock()
 	d.connectionHistory.Store(addr, connHistory{})
 	d.conn.Store(addr, NewIncomingPeer(conn, d, addr, h.PeerID))
 }
@@ -38,13 +37,13 @@ func (d *Download) connectToPeers() {
 			}
 		}
 
+		if !d.c.sem.TryAcquire(1) {
+			break
+		}
+
+		d.c.connectionCount.Add(1)
+
 		global.Pool.Submit(func() {
-			if !d.c.sem.TryAcquire(1) {
-				return
-			}
-
-			d.c.connectionCount.Add(1)
-
 			ch := connHistory{lastTry: time.Now()}
 			defer func(h connHistory) {
 				d.c.ch.Set(addr, h, time.Hour)
@@ -52,6 +51,7 @@ func (d *Download) connectToPeers() {
 
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 			defer cancel()
+
 			conn, err := global.Dialer.DialContext(ctx, "tcp", addr.String())
 			if err != nil {
 				if errors.Is(err, context.DeadlineExceeded) {
@@ -69,7 +69,7 @@ func (d *Download) connectToPeers() {
 				return
 			}
 
-			rwc, err := mse.NewConnection(d.infoHash.Bytes(), conn)
+			rwc, err := mse.NewConnection(d.hash.Bytes(), conn)
 			if err != nil {
 				ch.err = err
 				d.c.sem.Release(1)
@@ -80,8 +80,4 @@ func (d *Download) connectToPeers() {
 			d.conn.Store(addr, NewOutgoingPeer(rwc, d, addr))
 		})
 	}
-}
-
-func (d *Download) sendRequests() {
-	d.log.Trace().Msg("send request")
 }

@@ -10,7 +10,7 @@ import (
 	"github.com/negrel/assert"
 )
 
-var handshakePstrV1 = []byte("\x19BitTorrent protocol")
+var handshakePstrV1 = []byte("\x13BitTorrent protocol")
 
 var HandshakeReserved = []byte{0, 0, 0, 0, 0, 0, 0, 0}
 

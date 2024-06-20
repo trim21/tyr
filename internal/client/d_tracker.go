@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"net/netip"
 	"slices"
 	"strconv"
@@ -11,14 +12,15 @@ import (
 	"time"
 
 	"github.com/anacrolix/torrent/metainfo"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/go-resty/resty/v2"
 	"github.com/rs/zerolog/log"
 	"github.com/samber/lo"
 	"github.com/trim21/errgo"
 	"github.com/valyala/bytebufferpool"
 	"github.com/zeebo/bencode"
+	"golang.org/x/exp/maps"
 
-	"tyr/internal/pkg/global"
 	"tyr/internal/pkg/null"
 )
 
@@ -35,8 +37,6 @@ func (d *Download) TryAnnounce() {
 
 func (d *Download) AsyncAnnounce(event string) {
 	d.asyncAnnounce(event)
-	d.connectToPeers()
-	global.Pool.Submit(d.sendRequests)
 }
 
 func (d *Download) asyncAnnounce(event string) {
@@ -78,6 +78,7 @@ func (tier TrackerTier) Announce(d *Download, event string) (AnnounceResult, err
 		if err != nil {
 			t.Lock()
 			t.err = err
+			t.nextAnnounce = time.Now().Add(time.Minute * 30)
 			t.Unlock()
 			continue
 		}
@@ -157,11 +158,13 @@ type Tracker struct {
 	err              error
 	url              string
 	peerCount        int
+	leechers         int
+	seeders          int
 }
 
 func (t *Tracker) req(d *Download) *resty.Request {
 	return d.c.http.R().
-		SetQueryParam("info_hash", d.infoHash.AsString()).
+		SetQueryParam("info_hash", d.hash.AsString()).
 		SetQueryParam("peer_id", d.peerID.AsString()).
 		SetQueryParam("port", strconv.FormatUint(uint64(d.c.Config.App.P2PPort), 10)).
 		SetQueryParam("compat", "1").
@@ -190,6 +193,10 @@ func (t *Tracker) announce(d *Download, event string) (AnnounceResult, error) {
 		log.Debug().Err(err).Str("res", res.String()).Msg("failed to decode tracker response")
 		return AnnounceResult{}, errgo.Wrap(err, "failed to parse torrent announce response")
 	}
+
+	var m map[string]any
+	fmt.Println(bencode.DecodeBytes(res.Body(), &m))
+	spew.Dump(maps.Keys(m))
 
 	//fmt.Println("t" res.String())
 
@@ -280,4 +287,17 @@ func (d *Download) setAnnounceList(m *metainfo.MetaInfo) {
 
 		d.trackers = append(d.trackers, t)
 	}
+}
+
+// ScrapeUrl return enabled tracker url for scrape request
+func (d *Download) ScrapeUrl() string {
+	// TODO : todo
+	panic("not implemented")
+	//d.m.RLock()
+	//defer d.m.RUnlock()
+
+	//for _, tier := range d.trackers {
+	//	for _, t := range tier.trackers {
+	//}
+	//}
 }

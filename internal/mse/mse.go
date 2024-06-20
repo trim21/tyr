@@ -24,7 +24,7 @@ func PreferCrypto(provided mse.CryptoMethod) mse.CryptoMethod {
 	return mse.CryptoMethodPlaintext
 }
 
-func NewAccept(conn net.Conn, keys []metainfo.Hash, selector mse.CryptoSelector) (io.ReadWriteCloser, error) {
+func NewAccept(conn net.Conn, keys []metainfo.Hash, selector mse.CryptoSelector) (net.Conn, error) {
 	rw, _, err := mse.ReceiveHandshake(conn, func(f func([]byte) bool) {
 		for _, ih := range keys {
 			if !f(ih[:]) {
@@ -37,21 +37,29 @@ func NewAccept(conn net.Conn, keys []metainfo.Hash, selector mse.CryptoSelector)
 		return nil, err
 	}
 
-	return wrappedConn{ReadWriter: rw, Closer: conn}, err
+	return wrappedConn{mse: rw, Conn: conn}, err
 }
 
-func NewConnection(infoHash []byte, conn net.Conn) (io.ReadWriteCloser, error) {
+func NewConnection(infoHash []byte, conn net.Conn) (net.Conn, error) {
 	ret, _, err := mse.InitiateHandshake(conn, infoHash, nil, mse.AllSupportedCrypto)
 	if err != nil {
 		return nil, err
 	}
 
-	return wrappedConn{ReadWriter: ret, Closer: conn}, nil
+	return wrappedConn{mse: ret, Conn: conn}, nil
 }
 
 var _ io.ReadWriteCloser = wrappedConn{}
 
 type wrappedConn struct {
-	io.ReadWriter
-	io.Closer
+	net.Conn
+	mse io.ReadWriter
+}
+
+func (c wrappedConn) Read(b []byte) (n int, err error) {
+	return c.mse.Read(b)
+}
+
+func (c wrappedConn) Write(b []byte) (n int, err error) {
+	return c.mse.Write(b)
 }

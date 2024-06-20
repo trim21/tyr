@@ -14,12 +14,17 @@ tasks:
   build:dev:
     generates:
       - dist/tmp/tmp.exe
+    env:
+      #      CGO_ENABLED: '0'
+      GORACE: halt_on_error=1
     sources:
+      - .env
       - go.mod
       - go.sum
       - "**/*.go"
+      - "internal/web/static/**/*"
       - "**/*.json"
-    cmd: go build -race -tags assert -o dist/tmp/tmp.exe main.go
+    cmd: go build -tags assert -o dist/tmp/tmp.exe main.go
 
   dev:
     watch: true
@@ -29,13 +34,13 @@ tasks:
       - .env
     cmds:
       - cp dist/tmp/tmp.exe dist/tmp/server.exe
-      - ./dist/tmp/server.exe --web 127.0.0.1:8002 --config-file ./config.toml
-
-  dev:release:
-    watch: true
-    deps:
-      - build
-    cmds:
-      - cp dist/tyr.exe dist/server.exe
-      - ./dist/server.exe --web 127.0.0.1:8002 --config-file ./config.toml
-#  lint: golangci-lint run
+      - dist/tmp/server.exe --debug --web 127.0.0.1:8002 --config-file ./config.toml
+  #
+  #  dev:release:
+  #    watch: true
+  #    deps:
+  #      - build
+  #    cmds:
+  #      - cp dist/tyr.exe dist/server.exe
+  #      - dist/server.exe --web 127.0.0.1:8002 --config-file ./config.toml
+  lint: golangci-lint run

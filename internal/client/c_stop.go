@@ -35,7 +35,7 @@ func (c *Client) saveSession() *panics.Recovered {
 				return
 			}
 
-			err = os.WriteFile(filepath.Join(c.sessionPath, "torrents", fmt.Sprintf("%x.resume", d.infoHash)), b, os.ModePerm)
+			err = os.WriteFile(filepath.Join(c.sessionPath, "torrents", fmt.Sprintf("%x.resume", d.hash)), b, os.ModePerm)
 			if err != nil {
 				log.Err(err).Msg("failed to save download")
 			}

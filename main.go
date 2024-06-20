@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -28,7 +29,9 @@ import (
 )
 
 func init() {
-	_, _ = maxprocs.Set()
+	if runtime.GOOS == "linux" {
+		_, _ = maxprocs.Set()
+	}
 }
 
 func main() {
@@ -43,6 +46,7 @@ func main() {
 
 	pflag.Bool("profile-cpu", false, "enable CPU profiling only")
 	pflag.Bool("profile-memory", false, "enable Memory profiling only")
+	pflag.Bool("debug", false, "enable debug mode")
 
 	// this avoids 'pflag: help requested' error when calling for help message.
 	if slices.Contains(os.Args[1:], "--help") || slices.Contains(os.Args[1:], "-h") {
@@ -58,6 +62,11 @@ func main() {
 	viper.AutomaticEnv()
 
 	lo.Must0(viper.BindPFlags(pflag.CommandLine), "failed to parse combine argument with env")
+
+	debug := viper.GetBool("debug")
+	if debug {
+		_, _ = fmt.Fprintln(os.Stderr, "enable debug mode")
+	}
 
 	profileMem := viper.GetBool("profile-memory")
 	profileCpu := viper.GetBool("profile-cpu")
@@ -124,15 +133,15 @@ func main() {
 
 	app := client.New(cfg, sessionPath)
 
-	if err := app.Start(); err != nil {
-		errExit("failed to listen on p2p port", err)
+	if e := app.Start(); e != nil {
+		errExit("failed to listen on p2p port", e)
 	}
 
 	m := lo.Must(metainfo.LoadFromFile(`C:\Users\Trim21\Downloads\ubuntu-24.04-desktop-amd64.iso.torrent.patched`))
 	lo.Must0(app.AddTorrent(m, lo.Must(m.UnmarshalInfo()), "C:\\Users\\Trim21\\Downloads\\ubuntu", strings.Split("a q e", " ")))
 
 	go func() {
-		server := web.New(app, webToken)
+		server := web.New(app, webToken, debug)
 		fmt.Println("start", address)
 		err = http.ListenAndServe(address, server)
 		if err != nil {

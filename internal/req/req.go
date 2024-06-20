@@ -1,14 +1,8 @@
 package req
 
-type Request struct {
-	PieceIndex uint32
-	Begin      uint32
-	Length     uint32
-}
+import (
+	"tyr/internal/proto"
+)
 
-// len(Data) should match request
-type Response struct {
-	Data       []byte
-	Begin      uint32
-	PieceIndex uint32
-}
+type Request = proto.ChunkRequest
+type Response = proto.ChunkResponse

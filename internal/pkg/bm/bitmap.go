@@ -8,8 +8,8 @@ import (
 	"github.com/samber/lo"
 )
 
-func New(l int) Bitmap {
-	return Bitmap{
+func New() *Bitmap {
+	return &Bitmap{
 		bm: roaring.New(),
 	}
 }
@@ -73,18 +73,31 @@ func (b *Bitmap) CompressedBytes() []byte {
 	return v
 }
 
-func (b *Bitmap) Array() []uint64 {
+func (b *Bitmap) RangeX(fn func(uint32) bool) {
 	b.m.RLock()
-	v := b.bm.ToDense()
-	b.m.RUnlock()
-	return v
+	defer b.m.RUnlock()
+	i := b.bm.Iterator()
+	for i.HasNext() {
+		if !fn(i.Next()) {
+			break
+		}
+	}
 }
 
-func (b *Bitmap) Bytes() []byte {
+func (b *Bitmap) Range(fn func(uint32)) {
+	b.m.RLock()
+	defer b.m.RUnlock()
+	i := b.bm.Iterator()
+	for i.HasNext() {
+		fn(i.Next())
+	}
+}
+
+func (b *Bitmap) Bitfield(size uint32) []byte {
 	b.m.RLock()
 	v := b.bm.ToDense()
 	b.m.RUnlock()
-	var buf = make([]byte, 0, len(v)/8+1)
+	var buf = make([]byte, 0, size)
 	for _, u := range v {
 		buf = binary.BigEndian.AppendUint64(buf, u)
 	}
@@ -95,4 +108,56 @@ func (b *Bitmap) XorRaw(bitmap *roaring.Bitmap) {
 	b.m.Lock()
 	b.bm.Xor(bitmap)
 	b.m.Unlock()
+}
+
+func (b *Bitmap) OR(bm *Bitmap) {
+	b.m.Lock()
+	bm.m.RLock()
+	b.bm.Or(bm.bm)
+	bm.m.RUnlock()
+	b.m.Unlock()
+}
+
+func (b *Bitmap) Clone() *Bitmap {
+	b.m.RLock()
+	m := b.bm.Clone()
+	b.m.RUnlock()
+
+	return FromBitmap(m)
+}
+
+func (b *Bitmap) WithAnd(bm *Bitmap) *Bitmap {
+	m := b.Clone()
+
+	bm.m.RLock()
+	m.bm.And(bm.bm)
+	bm.m.RUnlock()
+
+	return m
+}
+
+func (b *Bitmap) WithAndNot(bm *Bitmap) *Bitmap {
+	m := b.Clone()
+
+	bm.m.RLock()
+	m.bm.AndNot(bm.bm)
+	bm.m.RUnlock()
+
+	return m
+}
+
+func (b *Bitmap) WithOr(bm *Bitmap) *Bitmap {
+	m := b.Clone()
+
+	bm.m.RLock()
+	m.bm.Or(bm.bm)
+	bm.m.RUnlock()
+
+	return m
+}
+
+func (b *Bitmap) String() string {
+	b.m.RLock()
+	defer b.m.RUnlock()
+	return b.bm.String()
 }

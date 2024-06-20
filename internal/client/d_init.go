@@ -30,11 +30,11 @@ func (d *Download) initCheck() error {
 	}
 
 	var efs = make(map[int]*existingFile, len(d.info.Files)+1)
-	for i, f := range d.info.UpvertedV1Files() {
-		p := f.DisplayPath(&d.info)
-		f, err := tryAllocFile(i, filepath.Join(d.basePath, p), f.Length)
-		if err != nil {
-			return err
+	for i, tf := range d.info.UpvertedV1Files() {
+		p := tf.DisplayPath(&d.info)
+		f, e := tryAllocFile(i, filepath.Join(d.basePath, p), tf.Length)
+		if e != nil {
+			return e
 		}
 		if f != nil {
 			efs[i] = f
@@ -221,7 +221,7 @@ func tryAllocFile(index int, path string, size int64) (*existingFile, error) {
 			return nil, err
 		}
 
-		f, err := os.Create(path)
+		f, err = os.Create(path)
 		if err != nil {
 			return nil, err
 		}

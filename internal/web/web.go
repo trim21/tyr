@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/labstack/echo/v4"
+	echopprof "github.com/sevenNt/echo-pprof"
 	"github.com/swaggest/swgui"
 	"github.com/swaggest/swgui/v5"
 
@@ -20,7 +21,7 @@ type jsonRpcRequest struct {
 	ID json.RawMessage `json:"id"`
 }
 
-func New(c *client.Client, token string) http.Handler {
+func New(c *client.Client, token string, debug bool) http.Handler {
 	apiSchema := jsonrpc.OpenAPI{}
 	apiSchema.Reflector().SpecEns().Info.Title = "JSON-RPC"
 	apiSchema.Reflector().SpecEns().Info.Version = "0.0.1"
@@ -33,6 +34,13 @@ func New(c *client.Client, token string) http.Handler {
 	}
 
 	r := echo.New()
+
+	if debug {
+		r.Debug = true
+		echopprof.Wrap(r)
+
+		//r.Group().Any()
+	}
 
 	AddTorrent(h, c)
 

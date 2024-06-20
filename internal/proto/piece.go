@@ -1,25 +1,49 @@
 package proto
 
 import (
-	"bufio"
 	"encoding/binary"
 	"io"
 
+	"tyr/internal/pkg/bufpool"
 	"tyr/internal/proto/size"
 )
 
-func SendPiece(conn io.Writer, pieceIndex, begin uint32, data []byte) error {
-	w := bufio.NewWriter(conn)
+func SendPiece(conn io.Writer, r ChunkResponse) error {
+	var buf = bufpool.Get()
+	defer bufpool.Put(buf)
 
-	var buf = make([]byte, 0, size.Byte+size.Uint32*3)
+	buf.B = binary.BigEndian.AppendUint32(buf.B, uint32(len(r.Data)+size.Byte+size.Uint32*2))
+	buf.B = append(buf.B, byte(Piece))
+	buf.B = binary.BigEndian.AppendUint32(buf.B, r.PieceIndex)
+	buf.B = binary.BigEndian.AppendUint32(buf.B, r.Begin)
 
-	buf = binary.BigEndian.AppendUint32(buf, uint32(len(data)+size.Byte+size.Uint32*2))
-	buf = append(buf, byte(Piece))
-	buf = binary.BigEndian.AppendUint32(buf, pieceIndex)
-	buf = binary.BigEndian.AppendUint32(buf, begin)
+	_, err := conn.Write(buf.B)
+	if err != nil {
+		return err
+	}
 
-	w.Write(buf)
-	w.Write(data)
+	_, err = conn.Write(r.Data)
+	return err
+}
 
-	return w.Flush()
+func ReadPiecePayload(conn io.Reader, size uint32) (ChunkResponse, error) {
+	var payload = ChunkResponse{
+		Begin:      0,
+		PieceIndex: 0,
+		Data:       make([]byte, size-sizeUint32*2),
+	}
+
+	err := binary.Read(conn, binary.BigEndian, &payload.PieceIndex)
+	if err != nil {
+		return ChunkResponse{}, err
+	}
+
+	err = binary.Read(conn, binary.BigEndian, &payload.Begin)
+	if err != nil {
+		return ChunkResponse{}, err
+	}
+
+	_, err = io.ReadFull(conn, payload.Data)
+
+	return payload, err
 }

@@ -10,7 +10,6 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/samber/lo"
 	"github.com/trim21/errgo"
-	"golang.org/x/exp/maps"
 
 	"tyr/internal/mse"
 	"tyr/internal/pkg/global"
@@ -24,7 +23,7 @@ func (c *Client) Start() error {
 
 	go c.ch.Start()
 
-	if log.Trace().Enabled() {
+	if log.Debug().Enabled() {
 		go func() {
 			for {
 				time.Sleep(time.Second * 5)
@@ -87,8 +86,11 @@ func (c *Client) startListen() error {
 	}
 	go func() {
 		for {
+			// it may only return timeout error, so we can ignore this
+			//_ = c.sem.Acquire(context.Background(), 1)
 			conn, err := l.Accept()
 			if err != nil {
+				c.sem.Release(1)
 				continue
 			}
 
@@ -109,14 +111,14 @@ func (c *Client) startListen() error {
 			// handle mse
 			global.Pool.Submit(func() {
 				c.m.RLock()
-				keys := maps.Keys(c.downloadMap)
+				keys := c.infoHashes
 				c.m.RUnlock()
 
 				rwc, err := mse.NewAccept(conn, keys, c.mseSelector)
 				if err != nil {
-					c.connectionCount.Sub(1)
 					c.sem.Release(1)
 					c.connectionCount.Sub(1)
+					_ = conn.Close()
 					return
 				}
 
@@ -139,9 +141,10 @@ func (c *Client) handleConn() {
 			global.Pool.Submit(func() {
 				h, err := proto.ReadHandshake(conn.conn)
 				if err != nil {
-					_ = conn.conn.Close()
 					c.sem.Release(1)
 					c.connectionCount.Sub(1)
+					_ = conn.conn.Close()
+					return
 				}
 
 				log.Debug().Stringer("info_hash", h.InfoHash).Msg("incoming connection")
@@ -151,13 +154,14 @@ func (c *Client) handleConn() {
 
 				d, ok := c.downloadMap[h.InfoHash]
 				if !ok {
+					c.sem.Release(1)
+					c.connectionCount.Sub(1)
 					_ = conn.conn.Close()
 					return
 				}
 
 				d.AddConn(conn.addr, conn.conn, h)
 			})
-			continue
 		}
 	}
 }

@@ -24,23 +24,19 @@ func _() {
 	_ = x[Reject-16]
 	_ = x[AllowedFast-17]
 	_ = x[Extended-20]
-	_ = x[HashRequest-21]
-	_ = x[Hashes-22]
-	_ = x[HashReject-23]
 	_ = x[BitCometExtension-255]
 }
 
 const (
 	_Message_name_0 = "ChokeUnchokeInterestedNotInterestedHaveBitfieldRequestPieceCancelPort"
 	_Message_name_1 = "SuggestHaveAllHaveNoneRejectAllowedFast"
-	_Message_name_2 = "ExtendedHashRequestHashesHashReject"
+	_Message_name_2 = "Extended"
 	_Message_name_3 = "BitCometExtension"
 )
 
 var (
 	_Message_index_0 = [...]uint8{0, 5, 12, 22, 35, 39, 47, 54, 59, 65, 69}
 	_Message_index_1 = [...]uint8{0, 7, 14, 22, 28, 39}
-	_Message_index_2 = [...]uint8{0, 8, 19, 25, 35}
 )
 
 func (i Message) String() string {
@@ -50,9 +46,8 @@ func (i Message) String() string {
 	case 13 <= i && i <= 17:
 		i -= 13
 		return _Message_name_1[_Message_index_1[i]:_Message_index_1[i+1]]
-	case 20 <= i && i <= 23:
-		i -= 20
-		return _Message_name_2[_Message_index_2[i]:_Message_index_2[i+1]]
+	case i == 20:
+		return _Message_name_2
 	case i == 255:
 		return _Message_name_3
 	default:
