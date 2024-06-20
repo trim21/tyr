@@ -34,21 +34,29 @@ const Checking State = 3
 const Moving State = 3
 const Error State = 4
 
+type peerRequest struct {
+	peer *Peer
+	req  req.Request
+}
+
 // Download manage a download task
 // ctx should be canceled when torrent is removed, not stopped.
 type Download struct {
-	info              metainfo.Info
-	meta              metainfo.MetaInfo
-	reqHistory        *xsync.MapOf[uint32, downloadReq]
-	log               zerolog.Logger
-	ctx               context.Context
-	err               error
-	cancel            context.CancelFunc
-	cond              *sync.Cond
-	c                 *Client
-	ioDown            *flowrate.Monitor
-	ioUp              *flowrate.Monitor
-	ResChan           chan req.Response
+	info       metainfo.Info
+	meta       metainfo.MetaInfo
+	reqHistory *xsync.MapOf[uint32, downloadReq]
+	log        zerolog.Logger
+	ctx        context.Context
+	err        error
+	cancel     context.CancelFunc
+	cond       *sync.Cond
+	c          *Client
+	ioDown     *flowrate.Monitor
+	ioUp       *flowrate.Monitor
+
+	ResChan <-chan req.Response
+	ReqChan chan<- peerRequest
+
 	conn              *xsync.MapOf[netip.AddrPort, *Peer]
 	connectionHistory *xsync.MapOf[netip.AddrPort, connHistory]
 	bm                *bm.Bitmap

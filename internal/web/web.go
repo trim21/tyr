@@ -6,9 +6,9 @@ import (
 	"net/http"
 
 	"github.com/labstack/echo/v4"
-	echopprof "github.com/sevenNt/echo-pprof"
 	"github.com/swaggest/swgui"
 	"github.com/swaggest/swgui/v5"
+	echopprof "github.com/trim21/echo-pprof"
 
 	"tyr/internal/client"
 	"tyr/internal/web/jsonrpc"

@@ -46,7 +46,6 @@ func (d *Download) Init() {
 	if err != nil {
 		d.setError(err)
 		d.log.Err(err).Msg("failed to initCheck torrent data")
-		return
 	}
 
 	go d.startBackground()
@@ -56,6 +55,7 @@ func (d *Download) startBackground() {
 	d.log.Trace().Msg("start goroutine")
 
 	go d.backgroundPieceHandle()
+	go d.backgroundResHandler()
 
 	go func() {
 		for {
@@ -122,6 +122,17 @@ func (p *PriorityQueue) Pop() Priority {
 	x := old[n-1]
 	*p = old[:n-1]
 	return x
+}
+
+func (d *Download) backgroundResHandler() {
+	for {
+		select {
+		case <-d.ctx.Done():
+			return
+		case res := <-d.ResChan:
+			_ = res
+		}
+	}
 }
 
 func (d *Download) backgroundPieceHandle() {

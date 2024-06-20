@@ -25,7 +25,6 @@ require (
 	github.com/rs/zerolog v1.33.0
 	github.com/samber/lo v1.39.0
 	github.com/santhosh-tekuri/jsonschema/v2 v2.2.0
-	github.com/sevenNt/echo-pprof v0.1.1-0.20230131020615-4dd36891e14b
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.19.0
@@ -35,6 +34,7 @@ require (
 	github.com/swaggest/openapi-go v0.2.51
 	github.com/swaggest/swgui v1.8.1
 	github.com/swaggest/usecase v1.3.1
+	github.com/trim21/echo-pprof v0.1.2
 	github.com/trim21/errgo v0.0.2
 	github.com/valyala/bytebufferpool v1.0.0
 	github.com/zeebo/bencode v1.0.0

@@ -124,8 +124,8 @@ func (p *Peer) start(skipHandshake bool) {
 	defer p.d.conn.Delete(p.Address)
 	defer p.d.c.sem.Release(1)
 	defer p.d.c.connectionCount.Sub(1)
-	defer p.dead.Store(true)
 	defer p.cancel()
+	defer p.dead.Store(true)
 
 	if err := proto.SendHandshake(p.Conn, p.d.hash, NewPeerID()); err != nil {
 		p.log.Trace().Err(err).Msg("failed to send handshake to peer")
