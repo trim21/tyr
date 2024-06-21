@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/netip"
@@ -64,25 +65,30 @@ func newPeer(
 ) *Peer {
 	ctx, cancel := context.WithCancel(context.Background())
 	l := d.log.With().Stringer("addr", addr)
+	var ua string
 	if !peerID.Zero() {
+		ua = parsePeerID(peerID)
 		l = l.Str("peer_id", url.QueryEscape(peerID.AsString()))
 	}
 
 	p := &Peer{
-		ctx:          ctx,
-		log:          l.Logger(),
-		fast:         fast,
-		Conn:         conn,
-		d:            d,
-		cancel:       cancel,
-		bitfieldSize: (d.info.NumPieces + 7) / 8,
-		Bitmap:       bm.New(d.info.NumPieces),
-		ioUp:         flowrate.New(time.Second, time.Second),
-		ioDown:       flowrate.New(time.Second, time.Second),
-		Address:      addr,
-		reqChan:      make(chan proto.ChunkRequest, 1),
+		ctx:                  ctx,
+		log:                  l.Logger(),
+		supportFastExtension: fast,
+		Conn:                 conn,
+		d:                    d,
+		cancel:               cancel,
+		bitfieldSize:         (d.info.NumPieces + 7) / 8,
+		Bitmap:               bm.New(d.info.NumPieces),
+		ioOut:                flowrate.New(time.Second, time.Second),
+		ioIn:                 flowrate.New(time.Second, time.Second),
+		Address:              addr,
 		//ResChan:   make(chan req.Response, 1),
 		requests: xsync.NewMapOf[proto.ChunkRequest, empty.Empty](),
+	}
+
+	if ua != "" {
+		p.UserAgent.Store(&ua)
 	}
 
 	go p.start(skipHandshake)
@@ -92,46 +98,84 @@ func newPeer(
 var ErrPeerSendInvalidData = errors.New("peer send invalid data")
 
 type Peer struct {
-	log      zerolog.Logger
-	ctx      context.Context
-	Conn     net.Conn
-	d        *Download
-	lastSend atomic.Pointer[time.Time]
-	reqChan  chan proto.ChunkRequest
-	cancel   context.CancelFunc
-	Bitmap   *bm.Bitmap
-	requests *xsync.MapOf[proto.ChunkRequest, empty.Empty]
-	Address  netip.AddrPort
-
-	ioUp   *flowrate.Monitor
-	ioDown *flowrate.Monitor
-
+	log          zerolog.Logger
+	ctx          context.Context
+	Conn         net.Conn
+	d            *Download
+	lastSend     atomic.Pointer[time.Time]
+	cancel       context.CancelFunc
+	Bitmap       *bm.Bitmap
+	requests     *xsync.MapOf[proto.ChunkRequest, empty.Empty]
+	ioOut        *flowrate.Monitor
+	ioIn         *flowrate.Monitor
+	Address      netip.AddrPort
 	m            sync.Mutex
 	wm           sync.Mutex
 	bitfieldSize uint32
-	Choked       atomic.Bool
-	Interested   atomic.Bool
-	// peer support fast extension
-	fast bool
+
+	peerChoked     atomic.Bool
+	peerInterested atomic.Bool
+
+	imChoked     atomic.Bool
+	imInterested atomic.Bool
+
+	supportFastExtension      bool
+	supportExtensionHandshake bool
+	UserAgent                 atomic.Pointer[string]
+	closed                    atomic.Bool
 }
 
-type Event struct {
-	Bitmap    *bm.Bitmap
-	Res       proto.ChunkResponse
-	Req       proto.ChunkRequest
-	Index     uint32
-	Event     proto.Message
-	keepAlive bool
-	Port      uint16
+func (p *Peer) Response(res proto.ChunkResponse) {
+	err := p.sendEvent(Event{
+		Event: proto.Piece,
+		Res:   res,
+	})
+	if err != nil {
+		p.close()
+	}
+	return
+}
+
+func (p *Peer) Request(req proto.ChunkRequest) {
+	if p.requests.Size() > 256 {
+		return
+	}
+
+	_, exist := p.requests.LoadOrStore(req, empty.Empty{})
+	if exist {
+		return
+	}
+
+	p.log.Trace().Any("req", req).Msg("send piece request")
+	err := p.sendEvent(Event{
+		Event: proto.Request,
+		Req:   req,
+	})
+	if err != nil {
+		p.close()
+	}
+	return
+}
+
+func (p *Peer) Have(index uint32) {
+	err := p.sendEvent(Event{
+		Index: index,
+		Event: proto.Have,
+	})
+	if err != nil {
+		p.close()
+	}
 }
 
 func (p *Peer) close() {
 	p.log.Trace().Msg("close")
-	p.cancel()
-	p.d.conn.Delete(p.Address)
-	p.d.c.sem.Release(1)
-	p.d.c.connectionCount.Sub(1)
-	_ = p.Conn.Close()
+	if p.closed.CompareAndSwap(false, true) {
+		p.cancel()
+		p.d.conn.Delete(p.Address)
+		p.d.c.sem.Release(1)
+		p.d.c.connectionCount.Sub(1)
+		_ = p.Conn.Close()
+	}
 }
 
 func (p *Peer) start(skipHandshake bool) {
@@ -155,25 +199,24 @@ func (p *Peer) start(skipHandshake bool) {
 			p.log.Trace().Msgf("peer info hash mismatch %x", h.InfoHash)
 			return
 		}
-		p.fast = h.FastExtension
+		p.supportFastExtension = h.FastExtension
 		p.log = p.log.With().Str("peer_id", url.QueryEscape(string(h.PeerID[:]))).Logger()
 		p.log.Trace().Msg("connect to peer")
+		ua := parsePeerID(h.PeerID)
+		p.UserAgent.Store(&ua)
 	}
 
-	if p.fast {
-		p.log.Trace().Msg("allow fast extension")
+	if p.supportFastExtension {
+		p.log.Trace().Msg("allow supportFastExtension extension")
 	}
 
-	// bep says we can omit bitfield if we don't have any pieces
 	var err error
-	if p.d.bm.Count() != 0 {
-		if p.fast {
-			if p.d.bm.Count() == p.d.info.NumPieces {
-				err = p.sendEvent(Event{Event: proto.HaveAll})
-			}
-		} else {
-			err = p.sendEvent(Event{Event: proto.Bitfield, Bitmap: p.d.bm})
-		}
+	if p.supportFastExtension && p.d.bm.Count() == 0 {
+		err = p.sendEvent(Event{Event: proto.HaveNone})
+	} else if p.supportFastExtension && p.d.bm.Count() == p.d.info.NumPieces {
+		err = p.sendEvent(Event{Event: proto.HaveAll})
+	} else {
+		err = p.sendEvent(Event{Event: proto.Bitfield, Bitmap: p.d.bm})
 	}
 
 	if err != nil {
@@ -181,26 +224,14 @@ func (p *Peer) start(skipHandshake bool) {
 		return
 	}
 
-	go p.keepAlive()
-
-	go func() {
-		for {
-			select {
-			case <-p.ctx.Done():
-				return
-			case q := <-p.reqChan:
-				p.requests.Store(q, empty.Empty{})
-				err := p.sendEvent(Event{
-					Event: proto.Request,
-					Req:   q,
-				})
-				// TODO: should handle error here
-				if err != nil {
-					return
-				}
-			}
+	if p.Bitmap.WithAndNot(p.d.bm).Count() != 0 {
+		err = p.sendEvent(Event{Event: proto.Interested})
+		if err != nil {
+			return
 		}
-	}()
+	}
+
+	go p.keepAlive()
 
 	for {
 		if p.ctx.Err() != nil {
@@ -215,30 +246,56 @@ func (p *Peer) start(skipHandshake bool) {
 			return
 		}
 
+		if event.Ignored {
+			continue
+		}
+
 		p.log.Trace().Msgf("receive %s event", color.BlueString(event.Event.String()))
 
 		switch event.Event {
 		case proto.Bitfield:
 			p.Bitmap.OR(event.Bitmap)
+			if p.Bitmap.WithAndNot(p.d.bm).Count() != 0 {
+				if p.imInterested.CompareAndSwap(false, true) {
+					err = p.sendEvent(Event{Event: proto.Interested})
+					if err != nil {
+						return
+					}
+				}
+			} else {
+				if p.imInterested.CompareAndSwap(true, false) {
+					err = p.sendEvent(Event{Event: proto.NotInterested})
+					if err != nil {
+						return
+					}
+				}
+			}
 		case proto.Have:
 			p.Bitmap.Set(event.Index)
 		case proto.Interested:
-			p.Interested.Store(true)
+			p.peerInterested.Store(true)
 		case proto.NotInterested:
-			p.Interested.Store(false)
+			p.peerInterested.Store(false)
 		case proto.Choke:
-			p.Choked.Store(true)
+			p.peerChoked.Store(true)
 		case proto.Unchoke:
-			p.Choked.Store(false)
+			p.peerChoked.Store(false)
 		case proto.Piece:
-			if !p.validateRes(event.Res) {
+			if !p.resIsValid(event.Res) {
 				p.log.Trace().Msg("failed to validate response")
 				// send response without requests
 				return
 			}
+
+			p.ioIn.Update(len(event.Res.Data))
 			p.d.ResChan <- event.Res
 		case proto.Request:
 			//p.reqChan <- event.Req
+
+		case proto.Extended:
+			if event.ExtHandshake.V.Set {
+				p.UserAgent.Store(&event.ExtHandshake.V.Value)
+			}
 
 		// TODO
 		case proto.Cancel:
@@ -251,7 +308,7 @@ func (p *Peer) start(skipHandshake bool) {
 		case proto.Reject:
 		case proto.AllowedFast:
 		// currently unsupported
-		case proto.Extended:
+
 		// currently ignored
 		case proto.BitCometExtension:
 		}
@@ -261,6 +318,7 @@ func (p *Peer) start(skipHandshake bool) {
 func (p *Peer) sendEvent(e Event) error {
 	p.wm.Lock()
 	defer p.wm.Unlock()
+	p.log.Trace().Msgf("send %s", color.BlueString(e.Event.String()))
 
 	p.Conn.SetWriteDeadline(time.Now().Add(time.Minute * 3))
 
@@ -286,6 +344,7 @@ func (p *Peer) sendEvent(e Event) error {
 	case proto.Request:
 		return proto.SendRequest(p.Conn, e.Req)
 	case proto.Piece:
+		p.ioOut.Update(len(e.Res.Data))
 		return proto.SendPiece(p.Conn, e.Res)
 	case proto.Cancel:
 		return proto.SendCancel(p.Conn, e.Req)
@@ -306,18 +365,20 @@ func (p *Peer) sendEvent(e Event) error {
 	return nil
 }
 
-func (p *Peer) validateRes(res proto.ChunkResponse) bool {
+func (p *Peer) resIsValid(res proto.ChunkResponse) bool {
 	r := proto.ChunkRequest{
 		PieceIndex: res.PieceIndex,
 		Begin:      res.Begin,
 		Length:     uint32(len(res.Data)),
 	}
 
-	if _, ok := p.requests.Load(r); ok {
-		p.requests.Delete(r)
-		return true
+	if _, ok := p.requests.Load(r); !ok {
+		return false
 	}
-	return false
+
+	p.requests.Delete(r)
+
+	return true
 }
 
 func (p *Peer) decodePiece(size uint32) (Event, error) {
@@ -327,4 +388,21 @@ func (p *Peer) decodePiece(size uint32) (Event, error) {
 	}
 
 	return Event{Event: proto.Piece, Res: payload}, nil
+}
+
+func parsePeerID(id PeerID) string {
+	if id[0] == '-' && id[7] == '-' {
+		if id[1] == 'q' && id[2] == 'B' {
+			if id[6] == '0' {
+				return fmt.Sprintf("qBittorrent %d.%d.%d", id[3]-'0', id[4]-'0', id[5]-'0')
+			}
+
+			return fmt.Sprintf("qBittorrent %d.%d.%d.%d", id[3]-'0', id[4]-'0', id[5]-'0', id[6]-'0')
+		}
+
+		// TODO
+		return fmt.Sprintf("%s", id[1:6])
+	}
+
+	return string(id[:6])
 }

@@ -52,7 +52,7 @@ func FromTorrent(m metainfo.MetaInfo) (Info, error) {
 
 	var pieces = make([]Hash, info.NumPieces())
 	for i := 0; i < info.NumPieces(); i++ {
-		pieces[i] = Hash(info.Piece(i).V1Hash().Value)
+		pieces[i] = Hash(info.Piece(i).V1Hash().Unwrap())
 	}
 
 	var files []File

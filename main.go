@@ -13,6 +13,8 @@ import (
 	"syscall"
 
 	"github.com/anacrolix/torrent/metainfo"
+	"github.com/anacrolix/torrent/types/infohash"
+	"github.com/negrel/assert"
 	"github.com/pkg/profile"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -140,6 +142,10 @@ func main() {
 	}
 
 	m := lo.Must(metainfo.LoadFromFile(`C:\Users\Trim21\Downloads\ubuntu-24.04-desktop-amd64.iso.torrent.patched`))
+	assert.Equal(
+		infohash.FromHexString("2aa4f5a7e209e54b32803d43670971c4c8caaa05"),
+		m.HashInfoBytes(),
+	)
 	lo.Must0(app.AddTorrent(m, lo.Must(meta.FromTorrent(*m)), "C:\\Users\\Trim21\\Downloads\\ubuntu", strings.Split("a q e", " ")))
 
 	var done = make(chan empty.Empty)

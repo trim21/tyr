@@ -84,15 +84,17 @@ func (b *Bitmap) CompressedBytes() []byte {
 	return v
 }
 
-func (b *Bitmap) RangeX(fn func(uint32) bool) {
+func (b *Bitmap) RangeX(fn func(uint32) bool) bool {
 	b.m.RLock()
 	defer b.m.RUnlock()
 	i := b.bm.Iterator()
 	for i.HasNext() {
 		if !fn(i.Next()) {
-			break
+			return true
 		}
 	}
+
+	return false
 }
 
 func (b *Bitmap) Range(fn func(uint32)) {
@@ -109,11 +111,13 @@ func (b *Bitmap) Bitfield() []byte {
 	b.m.RLock()
 	v := b.bm.ToDense()
 	b.m.RUnlock()
+
 	var buf = make([]byte, 0, (b.size+7)/8)
 	for _, u := range v {
 		buf = binary.BigEndian.AppendUint64(buf, u)
 	}
-	return buf
+
+	return buf[:(b.size+7)/8]
 }
 
 func (b *Bitmap) XorRaw(bitmap *roaring.Bitmap) {

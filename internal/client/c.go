@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"os"
 	"sync"
 	"time"
 
@@ -64,6 +65,7 @@ func New(cfg config.Config, sessionPath string) *Client {
 		mseDisabled: mseDisabled,
 		mseSelector: mseSelector,
 		sessionPath: sessionPath,
+		fh:          make(map[string]*os.File),
 	}
 }
 
@@ -91,6 +93,9 @@ type Client struct {
 	m               sync.RWMutex
 	checkQueueLock  sync.Mutex
 	mseDisabled     bool
+
+	fLock sync.Mutex
+	fh    map[string]*os.File
 }
 
 func (c *Client) AddTorrent(m *metainfo.MetaInfo, info meta.Info, downloadPath string, tags []string) error {
@@ -129,4 +134,22 @@ func (c *Client) checkComplete(d *Download) {
 	defer c.m.Unlock()
 
 	c.checkQueue = gslice.Remove(c.checkQueue, d.info.Hash)
+}
+
+func (c *Client) OpenFile(p string) (*os.File, error) {
+	c.fLock.Lock()
+	defer c.fLock.Unlock()
+
+	if f, ok := c.fh[p]; ok {
+		return f, nil
+	}
+
+	f, err := os.OpenFile(p, os.O_RDWR+os.O_CREATE, os.ModePerm)
+	if err != nil {
+		return nil, err
+	}
+
+	c.fh[p] = f
+
+	return f, nil
 }

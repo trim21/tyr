@@ -7,11 +7,13 @@ import (
 	"time"
 
 	"github.com/RoaringBitmap/roaring/v2"
+	"github.com/anacrolix/torrent/bencode"
 	"github.com/fatih/color"
 	"github.com/negrel/assert"
 	"github.com/trim21/errgo"
 
 	"tyr/internal/pkg/bm"
+	"tyr/internal/pkg/null"
 	"tyr/internal/proto"
 )
 
@@ -40,6 +42,22 @@ func (p *Peer) keepAlive() {
 			}
 		}
 	}
+}
+
+type Event struct {
+	Bitmap       *bm.Bitmap
+	Res          proto.ChunkResponse
+	Req          proto.ChunkRequest
+	Index        uint32
+	Event        proto.Message
+	keepAlive    bool
+	Port         uint16
+	ExtHandshake extension
+	Ignored      bool
+}
+
+type extension struct {
+	V null.String `bencode:"v"`
 }
 
 func (p *Peer) DecodeEvents() (Event, error) {
@@ -84,7 +102,7 @@ func (p *Peer) DecodeEvents() (Event, error) {
 	case proto.Cancel:
 		return p.decodeCancel()
 	case proto.Piece:
-		return p.decodePiece(size)
+		return p.decodePiece(size - 1)
 	case proto.Port:
 		err = binary.Read(p.Conn, binary.BigEndian, &event.Port)
 		return event, err
@@ -94,6 +112,19 @@ func (p *Peer) DecodeEvents() (Event, error) {
 	case proto.Reject:
 		return p.decodeReject()
 	case proto.Extended:
+		if _, err = io.ReadFull(p.Conn, b[:1]); err != nil {
+			return event, err
+		}
+
+		if b[0] == 0 {
+			err = bencode.NewDecoder(io.LimitReader(p.Conn, int64(size-2))).Decode(&event.ExtHandshake)
+			return event, err
+		}
+
+		event.Ignored = true
+		// unknown events
+		_, err = io.CopyN(io.Discard, p.Conn, int64(size-2))
+		return event, err
 	case proto.BitCometExtension:
 	}
 

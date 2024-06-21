@@ -12,9 +12,9 @@ import (
 func SendBitfield(conn io.Writer, bm *bm.Bitmap) error {
 	b := bm.Bitfield()
 
-	assert.Equal(2917, len(b))
+	assert.Equal(2916, len(b))
 
-	err := binary.Write(conn, binary.BigEndian, uint32(5+len(b)))
+	err := binary.Write(conn, binary.BigEndian, uint32(1+len(b)))
 	if err != nil {
 		return err
 	}

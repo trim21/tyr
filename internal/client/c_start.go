@@ -27,8 +27,7 @@ func (c *Client) Start() error {
 		go func() {
 			for {
 				time.Sleep(time.Second * 5)
-				fmt.Println("goroutine count", runtime.NumGoroutine())
-				fmt.Println("connection count", c.connectionCount.Load())
+				fmt.Printf("goroutine count %v connection count %v\n", runtime.NumGoroutine(), c.connectionCount.Load())
 				c.m.RLock()
 				fmt.Println("show downloads")
 				for _, d := range c.downloads {

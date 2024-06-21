@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/dustin/go-humanize"
+	"github.com/negrel/assert"
 	"github.com/trim21/errgo"
 
 	"github.com/valyala/bytebufferpool"
@@ -61,7 +62,7 @@ func (d *Download) initCheck() error {
 
 	for _, index := range h {
 		buf.Reset()
-		//d.log.Trace().Msgf("should check piece %d %s", index, humanize.IBytes(uint64(d.ioDown.Status().CurRate)))
+		//d.log.Trace().Msgf("should check piece %d %s", index, humanize.IBytes(uint64(d.ioIn.Status().CurRate)))
 		piece := d.pieceInfo[index]
 		for _, chunk := range piece.fileChunks {
 			f, ok := fileOpenCache[chunk.fileIndex]
@@ -90,7 +91,7 @@ func (d *Download) initCheck() error {
 		}
 
 		sum := sha1.Sum(buf.B[:d.info.PieceLength])
-		if sum != piece.hash {
+		if sum == d.info.Pieces[index] {
 			d.bm.Set(index)
 		}
 	}
@@ -143,24 +144,24 @@ func (d *Download) buildPieceToCheck(efs map[int]*existingFile) []uint32 {
 	return r
 }
 
-type pieceInfo struct {
+type pieceFileChunks struct {
 	fileChunks []pieceInfoFileChunk
-	hash       meta.Hash
 }
 
-func buildPieceInfos(info meta.Info) []pieceInfo {
-	p := make([]pieceInfo, info.NumPieces)
+func buildPieceInfos(info meta.Info) []pieceFileChunks {
+	p := make([]pieceFileChunks, info.NumPieces)
 
-	for i := uint32(32); i < info.NumPieces; i++ {
+	for i := uint32(0); i < info.NumPieces; i++ {
 		p[i] = getPieceInfo(i, info)
 	}
 
 	return p
 }
 
-func getPieceInfo(i uint32, info meta.Info) pieceInfo {
-	return pieceInfo{
-		hash:       info.Pieces[i],
+func getPieceInfo(i uint32, info meta.Info) pieceFileChunks {
+	assert.False(info.Pieces[i] == [20]byte{})
+
+	return pieceFileChunks{
 		fileChunks: pieceFileInfos(i, info),
 	}
 }

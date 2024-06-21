@@ -13,7 +13,10 @@ import (
 
 var handshakePstrV1 = []byte("\x13BitTorrent protocol")
 
-var HandshakeReserved = []byte{0, 0, 0, 0, 0, 0, 0, 0}
+var fastExtensionEnabled byte = 1 << 2
+var exchangeExtensionEnabled byte = 0x10
+
+var HandshakeReserved = []byte{0, 0, 0, 0, 0, exchangeExtensionEnabled, 0, 0}
 
 // SendHandshake = <pStrlen><pStr><reserved><info_hash><peer_id>
 // - pStrlen = length of pStr (1 byte)
@@ -44,9 +47,10 @@ func SendHandshake(conn io.Writer, infoHash, peerID [20]byte) error {
 }
 
 type Handshake struct {
-	InfoHash      meta.Hash
-	PeerID        [20]byte
-	FastExtension bool
+	InfoHash           meta.Hash
+	PeerID             [20]byte
+	FastExtension      bool
+	ExchangeExtensions bool
 }
 
 func (h Handshake) GoString() string {
@@ -54,8 +58,6 @@ func (h Handshake) GoString() string {
 }
 
 var ErrHandshakeMismatch = errors.New("handshake string mismatch")
-
-var fastExtensionEnabled byte = 1 << 2
 
 func ReadHandshake(conn io.Reader) (Handshake, error) {
 	var b = make([]byte, 20)
@@ -81,6 +83,10 @@ func ReadHandshake(conn io.Reader) (Handshake, error) {
 
 	if b[8]&fastExtensionEnabled != 0 {
 		h.FastExtension = true
+	}
+
+	if b[5]&exchangeExtensionEnabled != 0 {
+		h.ExchangeExtensions = true
 	}
 
 	n, err = conn.Read(h.InfoHash[:])

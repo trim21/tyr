@@ -8,9 +8,9 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/swaggest/swgui"
 	"github.com/swaggest/swgui/v5"
-	echopprof "github.com/trim21/echo-pprof"
 
 	"tyr/internal/client"
+	"tyr/internal/web/internal/prof"
 	"tyr/internal/web/jsonrpc"
 )
 
@@ -37,9 +37,7 @@ func New(c *client.Client, token string, debug bool) http.Handler {
 
 	if debug {
 		r.Debug = true
-		echopprof.Wrap(r)
-
-		//r.Group().Any()
+		prof.Wrap(r)
 	}
 
 	AddTorrent(h, c)

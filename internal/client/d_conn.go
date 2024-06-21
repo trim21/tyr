@@ -37,6 +37,10 @@ func (d *Download) connectToPeers() {
 			}
 		}
 
+		if _, ok := d.conn.Load(addr); ok {
+			continue
+		}
+
 		if !d.c.sem.TryAcquire(1) {
 			break
 		}

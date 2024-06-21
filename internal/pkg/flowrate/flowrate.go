@@ -10,6 +10,8 @@ import (
 	"math"
 	"sync"
 	"time"
+
+	"github.com/dustin/go-humanize"
 )
 
 // Monitor monitors and limits the transfer rate of a data stream.
@@ -110,6 +112,10 @@ type Status struct {
 	BytesRem int64         // Number of bytes remaining in the transfer
 	TimeRem  time.Duration // Estimated time to completion
 	Active   bool          // Flag indicating an active transfer
+}
+
+func (s Status) RateString() string {
+	return humanize.IBytes(uint64(s.CurRate)) + "/s"
 }
 
 // Status returns current transfer status information. The returned value

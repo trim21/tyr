@@ -18,7 +18,6 @@ require (
 	github.com/go-resty/resty/v2 v2.13.1
 	github.com/jellydator/ttlcache/v3 v3.2.0
 	github.com/labstack/echo/v4 v4.12.0
-	github.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f
 	github.com/negrel/assert v0.2.0
 	github.com/panjf2000/ants/v2 v2.10.0
 	github.com/pkg/profile v1.7.0
@@ -35,7 +34,6 @@ require (
 	github.com/swaggest/openapi-go v0.2.51
 	github.com/swaggest/swgui v1.8.1
 	github.com/swaggest/usecase v1.3.1
-	github.com/trim21/echo-pprof v0.1.2
 	github.com/trim21/errgo v0.0.2
 	github.com/valyala/bytebufferpool v1.0.0
 	github.com/zeebo/bencode v1.0.0

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"sort"
 	"strings"
 	"sync"
 	stdSync "sync/atomic"
@@ -12,7 +13,7 @@ import (
 
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/types/infohash"
-	"github.com/mxk/go-flowrate/flowrate"
+	"github.com/dustin/go-humanize"
 	"github.com/puzpuzpuz/xsync/v3"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -21,6 +22,8 @@ import (
 
 	"tyr/internal/meta"
 	"tyr/internal/pkg/bm"
+	"tyr/internal/pkg/flowrate"
+	"tyr/internal/pkg/global"
 	"tyr/internal/proto"
 )
 
@@ -42,48 +45,57 @@ type peerRequest struct {
 // Download manage a download task
 // ctx should be canceled when torrent is removed, not stopped.
 type Download struct {
-	info       meta.Info
-	meta       metainfo.MetaInfo
-	reqHistory *xsync.MapOf[uint32, downloadReq]
-	log        zerolog.Logger
-	ctx        context.Context
-	err        error
-	cancel     context.CancelFunc
-	cond       *sync.Cond
-	c          *Client
-	ioDown     *flowrate.Monitor
-	ioUp       *flowrate.Monitor
-
-	ResChan chan proto.ChunkResponse
-	ReqChan chan peerRequest
-
+	meta              metainfo.MetaInfo
+	log               zerolog.Logger
+	ctx               context.Context
+	err               error
+	reqHistory        *xsync.MapOf[uint32, downloadReq]
+	cancel            context.CancelFunc
+	cond              *sync.Cond
+	c                 *Client
+	ioDown            *flowrate.Monitor
+	ioUp              *flowrate.Monitor
+	ResChan           chan proto.ChunkResponse
 	conn              *xsync.MapOf[netip.AddrPort, *Peer]
 	connectionHistory *xsync.MapOf[netip.AddrPort, connHistory]
 	bm                *bm.Bitmap
-	PieceData         *xsync.MapOf[uint32, []byte]
-	basePath          string
-	key               string
-	downloadDir       string
-	tags              []string
-	pieceInfo         []pieceInfo
-	trackers          []TrackerTier
-	peers             []netip.AddrPort
-	downloaded        atomic.Int64
-	done              atomic.Bool
-	uploaded          atomic.Int64
-	completed         atomic.Int64
-	checkProgress     atomic.Int64
-	uploadAtStart     int64
-	downloadAtStart   int64
-	lazyInitialized   atomic.Bool
-	seq               atomic.Bool
-	m                 sync.RWMutex
-	peersMutex        sync.RWMutex
-	connMutex         sync.RWMutex
-	announcePending   stdSync.Bool
-	peerID            PeerID
-	state             State
-	private           bool
+
+	pdMutex     sync.RWMutex
+	pieceData   map[uint32][]*proto.ChunkResponse
+	pieceChunks [][]proto.ChunkRequest
+
+	basePath        string
+	key             string
+	downloadDir     string
+	tags            []string
+	pieceInfo       []pieceFileChunks
+	trackers        []TrackerTier
+	peers           []netip.AddrPort
+	AddAt           int64
+	CompletedAt     atomic.Int64
+	info            meta.Info
+	downloaded      atomic.Int64
+	corrupted       atomic.Int64
+	done            atomic.Bool
+	uploaded        atomic.Int64
+	completed       atomic.Int64
+	checkProgress   atomic.Int64
+	uploadAtStart   int64
+	downloadAtStart int64
+	lazyInitialized atomic.Bool
+	seq             atomic.Bool
+	m               sync.RWMutex
+	peersMutex      sync.RWMutex
+	connMutex       sync.RWMutex
+	announcePending stdSync.Bool
+	peerID          PeerID
+	state           State
+	private         bool
+}
+
+type pieceChunk struct {
+	data   []byte
+	offset uint32
 }
 
 func (c *Client) NewDownload(m *metainfo.MetaInfo, info meta.Info, basePath string, tags []string) *Download {
@@ -103,14 +115,24 @@ func (c *Client) NewDownload(m *metainfo.MetaInfo, info meta.Info, basePath stri
 
 		reqHistory: xsync.NewMapOf[uint32, downloadReq](),
 
+		AddAt: time.Now().Unix(),
+
+		ResChan: make(chan proto.ChunkResponse, 1),
+
 		ioDown: flowrate.New(time.Second, time.Second),
 		ioUp:   flowrate.New(time.Second, time.Second),
 
 		conn:              xsync.NewMapOf[netip.AddrPort, *Peer](),
 		connectionHistory: xsync.NewMapOf[netip.AddrPort, connHistory](),
 
+		peers: []netip.AddrPort{
+			netip.MustParseAddrPort("192.168.1.3:50025"),
+		},
+
 		pieceInfo: buildPieceInfos(info),
-		PieceData: xsync.NewMapOf[uint32, []byte](),
+
+		pieceData:   make(map[uint32][]*proto.ChunkResponse, 20),
+		pieceChunks: buildPieceChunk(info),
 
 		//key:
 		// there maybe 1 uint64 extra data here.
@@ -122,7 +144,12 @@ func (c *Client) NewDownload(m *metainfo.MetaInfo, info meta.Info, basePath stri
 	d.seq.Store(true)
 	d.cond = sync.NewCond(&d.m)
 
-	d.setAnnounceList(m)
+	if !global.Dev {
+		d.setAnnounceList(m)
+	}
+
+	//spew.Dump(d.pieceChunks[0])
+	//spew.Dump(d.pieceChunks[len(d.pieceChunks)-1])
 
 	return d
 }
@@ -138,7 +165,12 @@ func (d *Download) Display() string {
 	d.m.RLock()
 	defer d.m.RUnlock()
 
-	_, _ = fmt.Fprintf(buf, "%s | %.20s | %.2f%% | %d ↓", d.state, d.info.Name, float64(d.completed.Load())/float64(d.info.TotalLength)*100.0, d.conn.Size())
+	_, _ = fmt.Fprintf(buf, "%s | %.20s | %.2f%% | %s | %s | %d ↓",
+		d.state, d.info.Name,
+		float64(int64(d.bm.Count())*d.info.PieceLength)/float64(d.info.TotalLength)*100.0,
+		humanize.IBytes(uint64(d.downloaded.Load())),
+		d.ioDown.Status().RateString(), d.conn.Size())
+
 	for _, tier := range d.trackers {
 		for _, t := range tier.trackers {
 			t.RLock()
@@ -149,7 +181,40 @@ func (d *Download) Display() string {
 			t.RUnlock()
 		}
 	}
+
+	var s []peerDisplay
+
+	d.conn.Range(func(key netip.AddrPort, p *Peer) bool {
+		s = append(s, peerDisplay{
+			Up:     humanize.IBytes(uint64(p.ioOut.Status().CurRate)),
+			Down:   humanize.IBytes(uint64(p.ioIn.Status().CurRate)),
+			Client: p.UserAgent.Load(),
+			Addr:   key,
+		})
+
+		return true
+	})
+
+	sort.Slice(s, func(i, j int) bool {
+		return s[i].Addr.Compare(s[j].Addr) < 1
+	})
+
+	for _, p := range s {
+		if p.Client == nil {
+			_, _ = fmt.Fprintf(buf, "\n ↓ %6s/s | ↑ %6s/s | %s", p.Down, p.Up, p.Addr)
+		} else {
+			_, _ = fmt.Fprintf(buf, "\n ↓ %6s/s | ↑ %6s/s | %s | %s", p.Down, p.Up, *p.Client, p.Addr)
+		}
+	}
+
 	return buf.String()
+}
+
+type peerDisplay struct {
+	Up     string
+	Down   string
+	Client *string
+	Addr   netip.AddrPort
 }
 
 // if download encounter an error must stop downloading/uploading
