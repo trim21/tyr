@@ -9,7 +9,6 @@ import (
 	"github.com/docker/go-units"
 
 	"tyr/internal/proto"
-	"tyr/internal/req"
 )
 
 const defaultBlockSize = units.KiB * 16
@@ -42,6 +41,8 @@ func (d *Download) Check() {
 
 // Init check existing files
 func (d *Download) Init() {
+	d.log.Debug().Msg("initializing download")
+
 	err := d.initCheck()
 	if err != nil {
 		d.setError(err)
@@ -159,7 +160,7 @@ func (d *Download) backgroundPieceHandle() {
 
 		d.log.Trace().Msgf("connections %d", d.conn.Size())
 
-		h := make(PriorityQueue, d.numPieces)
+		h := make(PriorityQueue, d.info.NumPieces)
 
 		for i := range h {
 			h[i].Index = uint32(i)
@@ -199,7 +200,7 @@ func (d *Download) backgroundPieceHandle() {
 
 type peerRes struct {
 	addr netip.AddrPort
-	res  req.Response
+	res  proto.ChunkResponse
 }
 
 type downloadReq struct {
@@ -208,11 +209,16 @@ type downloadReq struct {
 }
 
 func (d *Download) scheduleSeq() {
-	d.bm.Clone().Range(func(i uint32) {
+	for i := uint32(0); i < d.info.NumPieces; i++ {
+		if d.bm.Get(i) {
+			continue
+		}
+
 		d.conn.Range(func(key netip.AddrPort, p *Peer) bool {
 			if p.Choked.Load() {
 				return true
 			}
+
 			if !p.Bitmap.Get(i) {
 				return true
 			}
@@ -241,5 +247,5 @@ func (d *Download) scheduleSeq() {
 
 			return true
 		})
-	})
+	}
 }

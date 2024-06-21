@@ -13,15 +13,15 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/types/infohash"
 	"github.com/mxk/go-flowrate/flowrate"
-	"github.com/negrel/assert"
 	"github.com/puzpuzpuz/xsync/v3"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/valyala/bytebufferpool"
 	"go.uber.org/atomic"
 
+	"tyr/internal/meta"
 	"tyr/internal/pkg/bm"
-	"tyr/internal/req"
+	"tyr/internal/proto"
 )
 
 type State uint8
@@ -36,13 +36,13 @@ const Error State = 4
 
 type peerRequest struct {
 	peer *Peer
-	req  req.Request
+	req  proto.ChunkRequest
 }
 
 // Download manage a download task
 // ctx should be canceled when torrent is removed, not stopped.
 type Download struct {
-	info       metainfo.Info
+	info       meta.Info
 	meta       metainfo.MetaInfo
 	reqHistory *xsync.MapOf[uint32, downloadReq]
 	log        zerolog.Logger
@@ -54,8 +54,8 @@ type Download struct {
 	ioDown     *flowrate.Monitor
 	ioUp       *flowrate.Monitor
 
-	ResChan <-chan req.Response
-	ReqChan chan<- peerRequest
+	ResChan chan proto.ChunkResponse
+	ReqChan chan peerRequest
 
 	conn              *xsync.MapOf[netip.AddrPort, *Peer]
 	connectionHistory *xsync.MapOf[netip.AddrPort, connHistory]
@@ -68,7 +68,6 @@ type Download struct {
 	pieceInfo         []pieceInfo
 	trackers          []TrackerTier
 	peers             []netip.AddrPort
-	totalLength       int64
 	downloaded        atomic.Int64
 	done              atomic.Bool
 	uploaded          atomic.Int64
@@ -81,31 +80,22 @@ type Download struct {
 	m                 sync.RWMutex
 	peersMutex        sync.RWMutex
 	connMutex         sync.RWMutex
-	numPieces         uint32
 	announcePending   stdSync.Bool
-	hash              metainfo.Hash
 	peerID            PeerID
 	state             State
 	private           bool
 }
 
-func (c *Client) NewDownload(m *metainfo.MetaInfo, info metainfo.Info, basePath string, tags []string) *Download {
-	var private bool
-	if info.Private != nil {
-		private = *info.Private
-	}
-
+func (c *Client) NewDownload(m *metainfo.MetaInfo, info meta.Info, basePath string, tags []string) *Download {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	var n = info.NumPieces()
-
-	var infoHash = m.HashInfoBytes()
 	d := &Download{
 		ctx:      ctx,
+		info:     info,
 		cancel:   cancel,
 		meta:     *m,
 		c:        c,
-		log:      log.With().Hex("info_hash", infoHash.Bytes()).Logger(),
+		log:      log.With().Stringer("info_hash", info.Hash).Logger(),
 		state:    Checking,
 		peerID:   NewPeerID(),
 		tags:     tags,
@@ -116,27 +106,21 @@ func (c *Client) NewDownload(m *metainfo.MetaInfo, info metainfo.Info, basePath 
 		ioDown: flowrate.New(time.Second, time.Second),
 		ioUp:   flowrate.New(time.Second, time.Second),
 
-		totalLength:       info.TotalLength(),
-		info:              info,
-		hash:              infoHash,
 		conn:              xsync.NewMapOf[netip.AddrPort, *Peer](),
 		connectionHistory: xsync.NewMapOf[netip.AddrPort, connHistory](),
 
 		pieceInfo: buildPieceInfos(info),
-		numPieces: uint32(n),
 		PieceData: xsync.NewMapOf[uint32, []byte](),
 
 		//key:
 		// there maybe 1 uint64 extra data here.
-		bm:          bm.New(),
-		private:     private,
+		bm: bm.New(info.NumPieces),
+
 		downloadDir: basePath,
 	}
 
 	d.seq.Store(true)
 	d.cond = sync.NewCond(&d.m)
-
-	assert.Equal(uint32(len(d.pieceInfo)), d.numPieces)
 
 	d.setAnnounceList(m)
 
@@ -148,11 +132,13 @@ func (d *Download) Move(target string) error {
 }
 
 func (d *Download) Display() string {
-	d.m.RLock()
-	defer d.m.RUnlock()
 	buf := bytebufferpool.Get()
 	defer bytebufferpool.Put(buf)
-	_, _ = fmt.Fprintf(buf, "%s | %.20s | %.2f%% | %d ↓", d.state, d.info.Name, float64(d.completed.Load())/float64(d.totalLength)*100.0, d.conn.Size())
+
+	d.m.RLock()
+	defer d.m.RUnlock()
+
+	_, _ = fmt.Fprintf(buf, "%s | %.20s | %.2f%% | %d ↓", d.state, d.info.Name, float64(d.completed.Load())/float64(d.info.TotalLength)*100.0, d.conn.Size())
 	for _, tier := range d.trackers {
 		for _, t := range tier.trackers {
 			t.RLock()

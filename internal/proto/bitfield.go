@@ -4,11 +4,17 @@ import (
 	"encoding/binary"
 	"io"
 
+	"github.com/negrel/assert"
+
 	"tyr/internal/pkg/bm"
 )
 
-func SendBitfield(conn io.Writer, bm *bm.Bitmap, size uint32) error {
-	err := binary.Write(conn, binary.BigEndian, 1+size)
+func SendBitfield(conn io.Writer, bm *bm.Bitmap) error {
+	b := bm.Bitfield()
+
+	assert.Equal(2917, len(b))
+
+	err := binary.Write(conn, binary.BigEndian, uint32(5+len(b)))
 	if err != nil {
 		return err
 	}
@@ -19,9 +25,7 @@ func SendBitfield(conn io.Writer, bm *bm.Bitmap, size uint32) error {
 		return err
 	}
 
-	b := bm.Bitfield(size)
-
-	_, err = conn.Write(b[:size])
+	_, err = conn.Write(b)
 
 	return err
 }

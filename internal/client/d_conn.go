@@ -18,7 +18,7 @@ func (d *Download) AddConn(addr netip.AddrPort, conn net.Conn, h proto.Handshake
 	//d.connMutex.Lock()
 	//defer d.connMutex.Unlock()
 	d.connectionHistory.Store(addr, connHistory{})
-	d.conn.Store(addr, NewIncomingPeer(conn, d, addr, h.PeerID))
+	d.conn.Store(addr, NewIncomingPeer(conn, d, addr, h))
 }
 
 func (d *Download) connectToPeers() {
@@ -69,7 +69,7 @@ func (d *Download) connectToPeers() {
 				return
 			}
 
-			rwc, err := mse.NewConnection(d.hash.Bytes(), conn)
+			rwc, err := mse.NewConnection(d.info.Hash.Bytes(), conn)
 			if err != nil {
 				ch.err = err
 				d.c.sem.Release(1)

@@ -18,5 +18,5 @@ func TestSendPiece(t *testing.T) {
 		PieceIndex: 5,
 	}))
 
-	assert.Equal(t, "\x00\x00\x00\x14\x07\x00\x00\x00\x14\x00\x00\x00\x05hello world", b.String())
+	assert.Equal(t, "\x00\x00\x00\x14\x07\x00\x00\x00\x05\x00\x00\x00\x14hello world", b.String())
 }

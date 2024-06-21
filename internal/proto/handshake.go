@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/anacrolix/torrent/metainfo"
 	"github.com/negrel/assert"
+
+	"tyr/internal/meta"
 )
 
 var handshakePstrV1 = []byte("\x13BitTorrent protocol")
@@ -43,8 +44,9 @@ func SendHandshake(conn io.Writer, infoHash, peerID [20]byte) error {
 }
 
 type Handshake struct {
-	InfoHash metainfo.Hash
-	PeerID   [20]byte
+	InfoHash      meta.Hash
+	PeerID        [20]byte
+	FastExtension bool
 }
 
 func (h Handshake) GoString() string {
@@ -52,6 +54,8 @@ func (h Handshake) GoString() string {
 }
 
 var ErrHandshakeMismatch = errors.New("handshake string mismatch")
+
+var fastExtensionEnabled byte = 1 << 2
 
 func ReadHandshake(conn io.Reader) (Handshake, error) {
 	var b = make([]byte, 20)
@@ -74,6 +78,10 @@ func ReadHandshake(conn io.Reader) (Handshake, error) {
 	assert.Equal(8, n)
 
 	var h = Handshake{}
+
+	if b[8]&fastExtensionEnabled != 0 {
+		h.FastExtension = true
+	}
 
 	n, err = conn.Read(h.InfoHash[:])
 	if err != nil {

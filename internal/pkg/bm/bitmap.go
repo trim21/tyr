@@ -8,27 +8,38 @@ import (
 	"github.com/samber/lo"
 )
 
-func New() *Bitmap {
+func New(size uint32) *Bitmap {
 	return &Bitmap{
-		bm: roaring.New(),
+		size: size,
+		bm:   roaring.New(),
 	}
 }
 
-func FromBitmap(bm *roaring.Bitmap) *Bitmap {
+func FromBitmap(bm *roaring.Bitmap, size uint32) *Bitmap {
+	bm.RemoveRange(uint64(size), uint64(size+64*8))
+
 	return &Bitmap{
-		bm: bm,
+		size: size,
+		bm:   bm,
 	}
 }
 
 // Bitmap is thread-safe bitmap wrapper
 type Bitmap struct {
-	bm *roaring.Bitmap
-	m  sync.RWMutex
+	bm   *roaring.Bitmap
+	m    sync.RWMutex
+	size uint32
 }
 
 func (b *Bitmap) Clear() {
 	b.m.Lock()
 	b.bm.Clear()
+	b.m.Unlock()
+}
+
+func (b *Bitmap) Fill() {
+	b.m.Lock()
+	b.bm.AddRange(0, uint64(b.size-1))
 	b.m.Unlock()
 }
 
@@ -93,11 +104,12 @@ func (b *Bitmap) Range(fn func(uint32)) {
 	}
 }
 
-func (b *Bitmap) Bitfield(size uint32) []byte {
+// Bitfield return bytes as bittorrent protocol
+func (b *Bitmap) Bitfield() []byte {
 	b.m.RLock()
 	v := b.bm.ToDense()
 	b.m.RUnlock()
-	var buf = make([]byte, 0, size)
+	var buf = make([]byte, 0, (b.size+7)/8)
 	for _, u := range v {
 		buf = binary.BigEndian.AppendUint64(buf, u)
 	}
@@ -123,7 +135,7 @@ func (b *Bitmap) Clone() *Bitmap {
 	m := b.bm.Clone()
 	b.m.RUnlock()
 
-	return FromBitmap(m)
+	return FromBitmap(m, b.size)
 }
 
 func (b *Bitmap) WithAnd(bm *Bitmap) *Bitmap {

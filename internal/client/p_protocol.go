@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/RoaringBitmap/roaring/v2"
+	"github.com/fatih/color"
 	"github.com/negrel/assert"
 	"github.com/trim21/errgo"
 
@@ -16,9 +17,11 @@ import (
 
 func (p *Peer) keepAlive() {
 	p.log.Trace().Msg("keep alive")
-	timer := time.NewTimer(time.Minute * 2)
+	timer := time.NewTicker(time.Second * 90) // 1.5 min
+
 	defer p.cancel()
 	defer timer.Stop()
+
 	for {
 		select {
 		case <-p.ctx.Done():
@@ -40,7 +43,7 @@ func (p *Peer) keepAlive() {
 }
 
 func (p *Peer) DecodeEvents() (Event, error) {
-	p.Conn.SetReadDeadline(time.Now().Add(time.Minute * 3))
+	p.Conn.SetReadDeadline(time.Now().Add(time.Minute * 4))
 
 	var b [4]byte
 	n, err := io.ReadFull(p.Conn, b[:])
@@ -48,7 +51,7 @@ func (p *Peer) DecodeEvents() (Event, error) {
 		return Event{}, err
 	}
 
-	assert.Equal(n, 4)
+	assert.Equal(4, n)
 
 	size := binary.BigEndian.Uint32(b[:])
 
@@ -59,20 +62,21 @@ func (p *Peer) DecodeEvents() (Event, error) {
 	}
 
 	p.log.Trace().Msgf("try to decode message with length %d", size)
-	n, err = p.Conn.Read(b[:1])
+	n, err = io.ReadFull(p.Conn, b[:1])
 	if err != nil {
 		return Event{}, err
 	}
 
 	assert.Equal(n, 1)
 
-	evt := proto.Message(b[0])
 	var event Event
-	p.log.Trace().Msgf("try to decode message event '%s'", evt)
-	switch evt {
-	case proto.Interested, proto.NotInterested, proto.Choke,
-		proto.Unchoke, proto.HaveAll, proto.HaveNone:
-		return Event{Event: evt}, nil
+	event.Event = proto.Message(b[0])
+	p.log.Trace().Msgf("try to decode message event %s", color.BlueString(event.Event.String()))
+	switch event.Event {
+	case proto.Choke, proto.Unchoke,
+		proto.Interested, proto.NotInterested,
+		proto.HaveAll, proto.HaveNone:
+		return event, nil
 	case proto.Bitfield:
 		return p.decodeBitfield(size)
 	case proto.Request:
@@ -82,10 +86,10 @@ func (p *Peer) DecodeEvents() (Event, error) {
 	case proto.Piece:
 		return p.decodePiece(size)
 	case proto.Port:
-		err = binary.Read(p.Conn, binary.BigEndian, event.Port)
+		err = binary.Read(p.Conn, binary.BigEndian, &event.Port)
 		return event, err
 	case proto.Have, proto.Suggest, proto.AllowedFast:
-		err = binary.Read(p.Conn, binary.BigEndian, event.Index)
+		err = binary.Read(p.Conn, binary.BigEndian, &event.Index)
 		return event, err
 	case proto.Reject:
 		return p.decodeReject()
@@ -95,7 +99,7 @@ func (p *Peer) DecodeEvents() (Event, error) {
 
 	// unknown events
 	_, err = io.CopyN(io.Discard, p.Conn, int64(size-1))
-	return Event{Event: evt}, err
+	return event, err
 }
 
 func (p *Peer) decodeBitfield(l uint32) (Event, error) {
@@ -122,13 +126,11 @@ func (p *Peer) decodeBitfield(l uint32) (Event, error) {
 
 	bitmap := roaring.FromDense(bb, false)
 
-	bitmap.RemoveRange(uint64(p.d.numPieces), uint64(p.d.numPieces+64*8))
-
-	return Event{Event: proto.Bitfield, Bitmap: bm.FromBitmap(bitmap)}, nil
+	return Event{Event: proto.Bitfield, Bitmap: bm.FromBitmap(bitmap, p.d.info.NumPieces)}, nil
 }
 
 func (p *Peer) decodeCancel() (Event, error) {
-	payload, err := proto.ReadCancelPayload(p.Conn)
+	payload, err := proto.ReadRequestPayload(p.Conn)
 	if err != nil {
 		return Event{}, err
 	}

@@ -3,10 +3,6 @@ package proto
 import (
 	"encoding/binary"
 	"io"
-
-	"github.com/negrel/assert"
-
-	"tyr/internal/proto/size"
 )
 
 type ChunkRequest struct {
@@ -15,76 +11,42 @@ type ChunkRequest struct {
 	Length     uint32
 }
 
-type ChunkResponse struct {
-	// len(Data) should match request
-	Data       []byte
-	Begin      uint32
-	PieceIndex uint32
-}
-
 func SendRequest(conn io.Writer, request ChunkRequest) error {
-	var b = make([]byte, 0, 4+4+4+1+4)
-	b = binary.BigEndian.AppendUint32(b, 4+4+4+1)
-
-	b = append(b, byte(Request))
-
-	b = binary.BigEndian.AppendUint32(b, request.PieceIndex)
-	b = binary.BigEndian.AppendUint32(b, request.Begin)
-	b = binary.BigEndian.AppendUint32(b, request.Length)
-
-	assert.Len(b, 4+4+4+1+4)
-
-	_, err := conn.Write(b)
-	return err
+	return sendRequestPayload(conn, Request, request)
 }
 
 func SendCancel(conn io.Writer, request ChunkRequest) error {
-	var b = make([]byte, 0, 4+1+4+4+4)
-	b = binary.BigEndian.AppendUint32(b, 13)
-
-	b = append(b, byte(Cancel))
-
-	b = binary.BigEndian.AppendUint32(b, request.PieceIndex)
-	b = binary.BigEndian.AppendUint32(b, request.Begin)
-	b = binary.BigEndian.AppendUint32(b, request.Length)
-
-	assert.Len(b, 4+1+4+4+4)
-
-	_, err := conn.Write(b)
-	return err
+	return sendRequestPayload(conn, Cancel, request)
 }
 
 func SendReject(conn io.Writer, request ChunkRequest) error {
-	var b = make([]byte, 0, 4+4+4+1+4)
-	b = binary.BigEndian.AppendUint32(b, 4+4+4+1)
+	return sendRequestPayload(conn, Reject, request)
+}
 
-	b = append(b, byte(Reject))
+func sendRequestPayload(conn io.Writer, id Message, request ChunkRequest) error {
+	var b [sizeUint32 + sizeByte + sizeUint32*3]byte
 
-	b = binary.BigEndian.AppendUint32(b, request.PieceIndex)
-	b = binary.BigEndian.AppendUint32(b, request.Begin)
-	b = binary.BigEndian.AppendUint32(b, request.Length)
+	binary.BigEndian.PutUint32(b[:], sizeByte+sizeUint32*3)
+	b[4] = byte(id)
+	binary.BigEndian.PutUint32(b[sizeUint32+sizeByte:], request.PieceIndex)
+	binary.BigEndian.PutUint32(b[sizeUint32+sizeByte+sizeUint32:], request.Begin)
+	binary.BigEndian.PutUint32(b[sizeUint32+sizeByte+sizeUint32+sizeUint32:], request.Length)
 
-	assert.Len(b, 4+4+4+1+4)
-
-	_, err := conn.Write(b)
+	_, err := conn.Write(b[:])
 	return err
 }
 
 func ReadRequestPayload(conn io.Reader) (payload ChunkRequest, err error) {
-	var b [12]byte
+	var b [sizeUint32 * 3]byte
 
 	_, err = io.ReadFull(conn, b[:])
 	if err != nil {
 		return
 	}
 
-	payload.PieceIndex = binary.BigEndian.Uint32(b[:4])
-	payload.Begin = binary.BigEndian.Uint32(b[size.Uint32:])
-	payload.Length = binary.BigEndian.Uint32(b[size.Uint32*2:])
+	payload.PieceIndex = binary.BigEndian.Uint32(b[:])
+	payload.Begin = binary.BigEndian.Uint32(b[sizeUint32:])
+	payload.Length = binary.BigEndian.Uint32(b[sizeUint32*2:])
 
 	return
-}
-
-func ReadCancelPayload(conn io.Reader) (ChunkRequest, error) {
-	return ReadRequestPayload(conn)
 }

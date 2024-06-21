@@ -4,8 +4,9 @@ import (
 	"io"
 	"net"
 
-	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
+
+	"tyr/internal/meta"
 )
 
 type rw struct {
@@ -24,7 +25,7 @@ func PreferCrypto(provided mse.CryptoMethod) mse.CryptoMethod {
 	return mse.CryptoMethodPlaintext
 }
 
-func NewAccept(conn net.Conn, keys []metainfo.Hash, selector mse.CryptoSelector) (net.Conn, error) {
+func NewAccept(conn net.Conn, keys []meta.Hash, selector mse.CryptoSelector) (net.Conn, error) {
 	rw, _, err := mse.ReceiveHandshake(conn, func(f func([]byte) bool) {
 		for _, ih := range keys {
 			if !f(ih[:]) {

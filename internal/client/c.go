@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -14,11 +13,13 @@ import (
 	"github.com/anacrolix/torrent/mse"
 	"github.com/go-resty/resty/v2"
 	"github.com/jellydator/ttlcache/v3"
+	"github.com/rs/zerolog/log"
 	"go.uber.org/atomic"
 	"golang.org/x/exp/maps"
 	"golang.org/x/sync/semaphore"
 
 	"tyr/internal/config"
+	"tyr/internal/meta"
 	imse "tyr/internal/mse"
 	"tyr/internal/pkg/global"
 	"tyr/internal/pkg/gslice"
@@ -56,8 +57,8 @@ func New(cfg config.Config, sessionPath string) *Client {
 		ch:     ttlcache.New[netip.AddrPort, connHistory](),
 		//sem:    semaphore.NewWeighted(int64(cfg.App.PeersLimit)),
 		sem:         semaphore.NewWeighted(50),
-		checkQueue:  make([]metainfo.Hash, 0, 3),
-		downloadMap: make(map[metainfo.Hash]*Download),
+		checkQueue:  make([]meta.Hash, 0, 3),
+		downloadMap: make(map[meta.Hash]*Download),
 		connChan:    make(chan incomingConn, 1),
 		http:        resty.NewWithClient(hc).SetHeader("User-Agent", global.UserAgent),
 		mseDisabled: mseDisabled,
@@ -75,8 +76,8 @@ type Client struct {
 	ctx             context.Context
 	http            *resty.Client
 	cancel          context.CancelFunc
-	downloadMap     map[metainfo.Hash]*Download
-	infoHashes      []metainfo.Hash
+	downloadMap     map[meta.Hash]*Download
+	infoHashes      []meta.Hash
 	mseKeys         mse.SecretKeyIter
 	connChan        chan incomingConn
 	sem             *semaphore.Weighted
@@ -84,7 +85,7 @@ type Client struct {
 	ch              *ttlcache.Cache[netip.AddrPort, connHistory]
 	sessionPath     string
 	downloads       []*Download
-	checkQueue      []metainfo.Hash
+	checkQueue      []meta.Hash
 	Config          config.Config
 	connectionCount atomic.Uint32
 	m               sync.RWMutex
@@ -92,12 +93,13 @@ type Client struct {
 	mseDisabled     bool
 }
 
-func (c *Client) AddTorrent(m *metainfo.MetaInfo, info metainfo.Info, downloadPath string, tags []string) error {
-	infoHash := m.HashInfoBytes()
+func (c *Client) AddTorrent(m *metainfo.MetaInfo, info meta.Info, downloadPath string, tags []string) error {
+	log.Info().Msgf("try add torrent %s", info.Hash)
+
 	c.m.RLock()
-	if _, ok := c.downloadMap[infoHash]; ok {
+	if _, ok := c.downloadMap[info.Hash]; ok {
 		c.m.RUnlock()
-		return errors.New(infoHash.HexString() + " exists")
+		return fmt.Errorf("torrent %x exists", info.Hash)
 	}
 	c.m.RUnlock()
 
@@ -107,7 +109,7 @@ func (c *Client) AddTorrent(m *metainfo.MetaInfo, info metainfo.Info, downloadPa
 	d := c.NewDownload(m, info, downloadPath, tags)
 
 	c.downloads = append(c.downloads, d)
-	c.downloadMap[infoHash] = d
+	c.downloadMap[info.Hash] = d
 	c.infoHashes = maps.Keys(c.downloadMap)
 
 	global.Pool.Submit(d.Init)
@@ -119,12 +121,12 @@ func (c *Client) addCheck(d *Download) {
 	c.m.Lock()
 	defer c.m.Unlock()
 
-	c.checkQueue = append(c.checkQueue, d.hash)
+	c.checkQueue = append(c.checkQueue, d.info.Hash)
 }
 
 func (c *Client) checkComplete(d *Download) {
 	c.m.Lock()
 	defer c.m.Unlock()
 
-	c.checkQueue = gslice.Remove(c.checkQueue, d.hash)
+	c.checkQueue = gslice.Remove(c.checkQueue, d.info.Hash)
 }

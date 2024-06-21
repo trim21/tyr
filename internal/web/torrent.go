@@ -14,6 +14,7 @@ import (
 	"github.com/trim21/errgo"
 
 	"tyr/internal/client"
+	"tyr/internal/meta"
 	"tyr/internal/web/jsonrpc"
 )
 
@@ -41,13 +42,9 @@ func AddTorrent(h *jsonrpc.Handler, c *client.Client) {
 				return CodeError(2, errgo.Wrap(err, "failed to parse torrent file"))
 			}
 
-			info, err := m.UnmarshalInfo()
+			info, err := meta.FromTorrent(*m)
 			if err != nil {
 				return CodeError(2, errgo.Wrap(err, "failed to parse torrent info"))
-			}
-
-			if info.HasV2() && !info.HasV1() {
-				return CodeError(3, errgo.Wrap(err, "bt v2 only torrent not supported yet"))
 			}
 
 			if info.PieceLength > 256*units.MiB {

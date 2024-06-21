@@ -23,6 +23,8 @@ import (
 
 	"tyr/internal/client"
 	"tyr/internal/config"
+	"tyr/internal/meta"
+	"tyr/internal/pkg/empty"
 	"tyr/internal/pkg/random"
 	_ "tyr/internal/platform" // deny compile on unsupported platform
 	"tyr/internal/web"
@@ -138,12 +140,15 @@ func main() {
 	}
 
 	m := lo.Must(metainfo.LoadFromFile(`C:\Users\Trim21\Downloads\ubuntu-24.04-desktop-amd64.iso.torrent.patched`))
-	lo.Must0(app.AddTorrent(m, lo.Must(m.UnmarshalInfo()), "C:\\Users\\Trim21\\Downloads\\ubuntu", strings.Split("a q e", " ")))
+	lo.Must0(app.AddTorrent(m, lo.Must(meta.FromTorrent(*m)), "C:\\Users\\Trim21\\Downloads\\ubuntu", strings.Split("a q e", " ")))
+
+	var done = make(chan empty.Empty)
 
 	go func() {
 		server := web.New(app, webToken, debug)
 		fmt.Println("start", address)
 		err = http.ListenAndServe(address, server)
+		done <- empty.Empty{}
 		if err != nil {
 			panic(err)
 		}
@@ -159,7 +164,12 @@ func main() {
 		syscall.SIGTERM,
 	)
 
-	<-signalChan
+	go func() {
+		<-signalChan
+		done <- empty.Empty{}
+	}()
+
+	<-done
 	fmt.Println("shutting down...")
 	app.Shutdown()
 }

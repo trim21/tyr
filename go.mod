@@ -14,6 +14,7 @@ require (
 	github.com/detailyang/go-fallocate v0.0.0-20180908115635-432fa640bd2e
 	github.com/docker/go-units v0.5.0
 	github.com/dustin/go-humanize v1.0.1
+	github.com/fatih/color v1.17.0
 	github.com/go-resty/resty/v2 v2.13.1
 	github.com/jellydator/ttlcache/v3 v3.2.0
 	github.com/labstack/echo/v4 v4.12.0

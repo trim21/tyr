@@ -12,17 +12,17 @@ import (
 	"time"
 
 	"github.com/dchest/uniuri"
+	"github.com/fatih/color"
 	"github.com/puzpuzpuz/xsync/v3"
 	"github.com/rs/zerolog"
 	"github.com/samber/lo"
 
 	"tyr/internal/pkg/bm"
 	"tyr/internal/pkg/empty"
+	"tyr/internal/pkg/flowrate"
 	"tyr/internal/pkg/global"
 	"tyr/internal/pkg/unsafe"
 	"tyr/internal/proto"
-	"tyr/internal/req"
-	"tyr/internal/util"
 )
 
 type PeerID [20]byte
@@ -47,11 +47,11 @@ func NewPeerID() (peerID PeerID) {
 }
 
 func NewOutgoingPeer(conn net.Conn, d *Download, addr netip.AddrPort) *Peer {
-	return newPeer(conn, d, addr, emptyPeerID, false)
+	return newPeer(conn, d, addr, emptyPeerID, false, false)
 }
 
-func NewIncomingPeer(conn net.Conn, d *Download, addr netip.AddrPort, peerID PeerID) *Peer {
-	return newPeer(conn, d, addr, peerID, true)
+func NewIncomingPeer(conn net.Conn, d *Download, addr netip.AddrPort, h proto.Handshake) *Peer {
+	return newPeer(conn, d, addr, h.PeerID, true, h.FastExtension)
 }
 
 func newPeer(
@@ -60,6 +60,7 @@ func newPeer(
 	addr netip.AddrPort,
 	peerID PeerID,
 	skipHandshake bool,
+	fast bool,
 ) *Peer {
 	ctx, cancel := context.WithCancel(context.Background())
 	l := d.log.With().Stringer("addr", addr)
@@ -70,15 +71,18 @@ func newPeer(
 	p := &Peer{
 		ctx:          ctx,
 		log:          l.Logger(),
+		fast:         fast,
 		Conn:         conn,
 		d:            d,
 		cancel:       cancel,
-		bitfieldSize: util.BitmapLen(d.numPieces),
-		Bitmap:       bm.New(),
+		bitfieldSize: (d.info.NumPieces + 7) / 8,
+		Bitmap:       bm.New(d.info.NumPieces),
+		ioUp:         flowrate.New(time.Second, time.Second),
+		ioDown:       flowrate.New(time.Second, time.Second),
 		Address:      addr,
-		reqChan:      make(chan req.Request, 1),
+		reqChan:      make(chan proto.ChunkRequest, 1),
 		//ResChan:   make(chan req.Response, 1),
-		requests: xsync.MapOf[req.Request, empty.Empty]{},
+		requests: xsync.NewMapOf[proto.ChunkRequest, empty.Empty](),
 	}
 
 	go p.start(skipHandshake)
@@ -88,46 +92,53 @@ func newPeer(
 var ErrPeerSendInvalidData = errors.New("peer send invalid data")
 
 type Peer struct {
-	log          zerolog.Logger
-	ctx          context.Context
-	Conn         net.Conn
-	d            *Download
-	lastSend     atomic.Pointer[time.Time]
-	reqChan      chan req.Request
-	cancel       context.CancelFunc
-	Bitmap       *bm.Bitmap
-	requests     xsync.MapOf[req.Request, empty.Empty]
-	Address      netip.AddrPort
+	log      zerolog.Logger
+	ctx      context.Context
+	Conn     net.Conn
+	d        *Download
+	lastSend atomic.Pointer[time.Time]
+	reqChan  chan proto.ChunkRequest
+	cancel   context.CancelFunc
+	Bitmap   *bm.Bitmap
+	requests *xsync.MapOf[proto.ChunkRequest, empty.Empty]
+	Address  netip.AddrPort
+
+	ioUp   *flowrate.Monitor
+	ioDown *flowrate.Monitor
+
 	m            sync.Mutex
 	wm           sync.Mutex
-	dead         atomic.Bool
 	bitfieldSize uint32
 	Choked       atomic.Bool
 	Interested   atomic.Bool
+	// peer support fast extension
+	fast bool
 }
 
 type Event struct {
 	Bitmap    *bm.Bitmap
-	Res       req.Response
-	Req       req.Request
+	Res       proto.ChunkResponse
+	Req       proto.ChunkRequest
 	Index     uint32
 	Event     proto.Message
 	keepAlive bool
 	Port      uint16
 }
 
+func (p *Peer) close() {
+	p.log.Trace().Msg("close")
+	p.cancel()
+	p.d.conn.Delete(p.Address)
+	p.d.c.sem.Release(1)
+	p.d.c.connectionCount.Sub(1)
+	_ = p.Conn.Close()
+}
+
 func (p *Peer) start(skipHandshake bool) {
 	p.log.Trace().Msg("start")
-	defer p.log.Trace().Msg("close")
-	defer close(p.reqChan)
-	defer p.Conn.Close()
-	defer p.d.conn.Delete(p.Address)
-	defer p.d.c.sem.Release(1)
-	defer p.d.c.connectionCount.Sub(1)
-	defer p.cancel()
-	defer p.dead.Store(true)
+	defer p.close()
 
-	if err := proto.SendHandshake(p.Conn, p.d.hash, NewPeerID()); err != nil {
+	if err := proto.SendHandshake(p.Conn, p.d.info.Hash, NewPeerID()); err != nil {
 		p.log.Trace().Err(err).Msg("failed to send handshake to peer")
 		return
 	}
@@ -140,15 +151,33 @@ func (p *Peer) start(skipHandshake bool) {
 			}
 			return
 		}
-		if h.InfoHash != p.d.hash {
+		if h.InfoHash != p.d.info.Hash {
 			p.log.Trace().Msgf("peer info hash mismatch %x", h.InfoHash)
 			return
 		}
+		p.fast = h.FastExtension
 		p.log = p.log.With().Str("peer_id", url.QueryEscape(string(h.PeerID[:]))).Logger()
 		p.log.Trace().Msg("connect to peer")
 	}
 
-	if err := p.sendEvent(Event{Event: proto.Bitfield, Bitmap: p.d.bm.Clone()}); err != nil {
+	if p.fast {
+		p.log.Trace().Msg("allow fast extension")
+	}
+
+	// bep says we can omit bitfield if we don't have any pieces
+	var err error
+	if p.d.bm.Count() != 0 {
+		if p.fast {
+			if p.d.bm.Count() == p.d.info.NumPieces {
+				err = p.sendEvent(Event{Event: proto.HaveAll})
+			}
+		} else {
+			err = p.sendEvent(Event{Event: proto.Bitfield, Bitmap: p.d.bm})
+		}
+	}
+
+	if err != nil {
+		p.log.Trace().Err(err).Msg("failed to send bitfield")
 		return
 	}
 
@@ -186,7 +215,7 @@ func (p *Peer) start(skipHandshake bool) {
 			return
 		}
 
-		p.log.Trace().Msgf("receive %s event", event.Event)
+		p.log.Trace().Msgf("receive %s event", color.BlueString(event.Event.String()))
 
 		switch event.Event {
 		case proto.Bitfield:
@@ -209,14 +238,16 @@ func (p *Peer) start(skipHandshake bool) {
 			}
 			p.d.ResChan <- event.Res
 		case proto.Request:
-			p.reqChan <- event.Req
+			//p.reqChan <- event.Req
 
 		// TODO
 		case proto.Cancel:
 		case proto.Port:
 		case proto.Suggest:
 		case proto.HaveAll:
+			p.Bitmap.Fill()
 		case proto.HaveNone:
+			p.Bitmap.Clear()
 		case proto.Reject:
 		case proto.AllowedFast:
 		// currently unsupported
@@ -251,7 +282,7 @@ func (p *Peer) sendEvent(e Event) error {
 	case proto.Have:
 		return proto.SendHave(p.Conn, e.Index)
 	case proto.Bitfield:
-		return proto.SendBitfield(p.Conn, e.Bitmap, p.bitfieldSize)
+		return proto.SendBitfield(p.Conn, e.Bitmap)
 	case proto.Request:
 		return proto.SendRequest(p.Conn, e.Req)
 	case proto.Piece:
@@ -275,8 +306,8 @@ func (p *Peer) sendEvent(e Event) error {
 	return nil
 }
 
-func (p *Peer) validateRes(res req.Response) bool {
-	r := req.Request{
+func (p *Peer) validateRes(res proto.ChunkResponse) bool {
+	r := proto.ChunkRequest{
 		PieceIndex: res.PieceIndex,
 		Begin:      res.Begin,
 		Length:     uint32(len(res.Data)),

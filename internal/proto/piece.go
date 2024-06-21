@@ -3,21 +3,24 @@ package proto
 import (
 	"encoding/binary"
 	"io"
-
-	"tyr/internal/pkg/bufpool"
-	"tyr/internal/proto/size"
 )
 
+type ChunkResponse struct {
+	// len(Data) should match request
+	Data       []byte
+	Begin      uint32
+	PieceIndex uint32
+}
+
 func SendPiece(conn io.Writer, r ChunkResponse) error {
-	var buf = bufpool.Get()
-	defer bufpool.Put(buf)
+	var b [sizeUint32 + sizeByte + sizeUint32*2]byte
 
-	buf.B = binary.BigEndian.AppendUint32(buf.B, uint32(len(r.Data)+size.Byte+size.Uint32*2))
-	buf.B = append(buf.B, byte(Piece))
-	buf.B = binary.BigEndian.AppendUint32(buf.B, r.PieceIndex)
-	buf.B = binary.BigEndian.AppendUint32(buf.B, r.Begin)
+	binary.BigEndian.PutUint32(b[:], uint32(len(r.Data)+sizeByte+sizeUint32*2))
+	b[4] = byte(Piece)
+	binary.BigEndian.PutUint32(b[sizeUint32+sizeByte:], r.PieceIndex)
+	binary.BigEndian.PutUint32(b[sizeUint32+sizeByte+sizeUint32:], r.Begin)
 
-	_, err := conn.Write(buf.B)
+	_, err := conn.Write(b[:])
 	if err != nil {
 		return err
 	}
@@ -28,9 +31,7 @@ func SendPiece(conn io.Writer, r ChunkResponse) error {
 
 func ReadPiecePayload(conn io.Reader, size uint32) (ChunkResponse, error) {
 	var payload = ChunkResponse{
-		Begin:      0,
-		PieceIndex: 0,
-		Data:       make([]byte, size-sizeUint32*2),
+		Data: make([]byte, size-sizeUint32*2),
 	}
 
 	err := binary.Read(conn, binary.BigEndian, &payload.PieceIndex)

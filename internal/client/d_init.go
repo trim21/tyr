@@ -1,19 +1,18 @@
 package client
 
 import (
-	"bytes"
 	"crypto/sha1"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 
-	"github.com/anacrolix/torrent/metainfo"
 	"github.com/dustin/go-humanize"
 	"github.com/trim21/errgo"
 
 	"github.com/valyala/bytebufferpool"
 
+	"tyr/internal/meta"
 	"tyr/internal/pkg/fallocate"
 )
 
@@ -30,8 +29,8 @@ func (d *Download) initCheck() error {
 	}
 
 	var efs = make(map[int]*existingFile, len(d.info.Files)+1)
-	for i, tf := range d.info.UpvertedV1Files() {
-		p := tf.DisplayPath(&d.info)
+	for i, tf := range d.info.Files {
+		p := tf.Path
 		f, e := tryAllocFile(i, filepath.Join(d.basePath, p), tf.Length)
 		if e != nil {
 			return e
@@ -66,7 +65,7 @@ func (d *Download) initCheck() error {
 		piece := d.pieceInfo[index]
 		for _, chunk := range piece.fileChunks {
 			f, ok := fileOpenCache[chunk.fileIndex]
-			fp := d.filePath(chunk.fileIndex)
+			fp := filepath.Join(d.basePath, d.info.Files[chunk.fileIndex].Path)
 			if !ok {
 				f, err = os.Open(fp)
 				if err != nil {
@@ -91,7 +90,7 @@ func (d *Download) initCheck() error {
 		}
 
 		sum := sha1.Sum(buf.B[:d.info.PieceLength])
-		if bytes.Equal(sum[:], piece.hash) {
+		if sum != piece.hash {
 			d.bm.Set(index)
 		}
 	}
@@ -110,11 +109,7 @@ func (d *Download) initCheck() error {
 
 // update progress by bitmap
 func (d *Download) updateProgress() {
-	d.completed.Store(int64(d.numPieces) * int64(d.bm.Count()))
-}
-
-func (d *Download) filePath(i int) string {
-	return filepath.Join(d.basePath, d.info.UpvertedFiles()[i].DisplayPath(&d.info))
+	d.completed.Store(int64(d.info.NumPieces) * int64(d.bm.Count()))
 }
 
 func (d *Download) buildPieceToCheck(efs map[int]*existingFile) []uint32 {
@@ -122,9 +117,9 @@ func (d *Download) buildPieceToCheck(efs map[int]*existingFile) []uint32 {
 		return nil
 	}
 
-	var r = make([]uint32, 0, d.info.NumPieces())
+	var r = make([]uint32, 0, d.info.NumPieces)
 
-	for i := uint32(0); i < d.numPieces; i++ {
+	for i := uint32(0); i < d.info.NumPieces; i++ {
 		p := d.pieceInfo[i]
 		shouldCheck := true
 		for _, c := range p.fileChunks {
@@ -149,23 +144,23 @@ func (d *Download) buildPieceToCheck(efs map[int]*existingFile) []uint32 {
 }
 
 type pieceInfo struct {
-	hash       []byte
 	fileChunks []pieceInfoFileChunk
+	hash       meta.Hash
 }
 
-func buildPieceInfos(info metainfo.Info) []pieceInfo {
-	p := make([]pieceInfo, info.NumPieces())
+func buildPieceInfos(info meta.Info) []pieceInfo {
+	p := make([]pieceInfo, info.NumPieces)
 
-	for i := 0; i < info.NumPieces(); i++ {
+	for i := uint32(32); i < info.NumPieces; i++ {
 		p[i] = getPieceInfo(i, info)
 	}
 
 	return p
 }
 
-func getPieceInfo(i int, info metainfo.Info) pieceInfo {
+func getPieceInfo(i uint32, info meta.Info) pieceInfo {
 	return pieceInfo{
-		hash:       info.Pieces[i : i+20],
+		hash:       info.Pieces[i],
 		fileChunks: pieceFileInfos(i, info),
 	}
 }
@@ -176,19 +171,19 @@ type pieceInfoFileChunk struct {
 	length       int64
 }
 
-func pieceFileInfos(i int, info metainfo.Info) []pieceInfoFileChunk {
+func pieceFileInfos(i uint32, info meta.Info) []pieceInfoFileChunk {
 	var pieceStart = int64(i) * info.PieceLength
-
-	if len(info.Files) == 0 {
-		return []pieceInfoFileChunk{{
-			offsetOfFile: pieceStart,
-			length:       min(info.Length-info.PieceLength*int64(i), info.PieceLength),
-		}}
-	}
 
 	var currentFileStart int64 = 0
 	var needToRead = info.PieceLength
 	var fileIndex = 0
+
+	if len(info.Files) == 1 {
+		return []pieceInfoFileChunk{{
+			offsetOfFile: pieceStart,
+			length:       min(info.TotalLength-info.PieceLength*int64(i), info.PieceLength),
+		}}
+	}
 
 	var result []pieceInfoFileChunk
 
