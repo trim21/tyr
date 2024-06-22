@@ -9,8 +9,9 @@ import (
 	"net/netip"
 	"net/url"
 	"sync"
-	"sync/atomic"
 	"time"
+
+	"go.uber.org/atomic"
 
 	"github.com/dchest/uniuri"
 	"github.com/fatih/color"
@@ -87,6 +88,8 @@ func newPeer(
 		requests: xsync.NewMapOf[proto.ChunkRequest, empty.Empty](),
 	}
 
+	p.QueueLimit.Store(250)
+
 	if ua != "" {
 		p.UserAgent.Store(&ua)
 	}
@@ -98,31 +101,29 @@ func newPeer(
 var ErrPeerSendInvalidData = errors.New("peer send invalid data")
 
 type Peer struct {
-	log          zerolog.Logger
-	ctx          context.Context
-	Conn         net.Conn
-	d            *Download
-	lastSend     atomic.Pointer[time.Time]
-	cancel       context.CancelFunc
-	Bitmap       *bm.Bitmap
-	requests     *xsync.MapOf[proto.ChunkRequest, empty.Empty]
-	ioOut        *flowrate.Monitor
-	ioIn         *flowrate.Monitor
-	Address      netip.AddrPort
-	m            sync.Mutex
-	wm           sync.Mutex
-	bitfieldSize uint32
-
-	peerChoked     atomic.Bool
-	peerInterested atomic.Bool
-
-	imChoked     atomic.Bool
-	imInterested atomic.Bool
-
+	log                       zerolog.Logger
+	ctx                       context.Context
+	Conn                      net.Conn
+	d                         *Download
+	lastSend                  atomic.Pointer[time.Time]
+	cancel                    context.CancelFunc
+	Bitmap                    *bm.Bitmap
+	requests                  *xsync.MapOf[proto.ChunkRequest, empty.Empty]
+	ioOut                     *flowrate.Monitor
+	ioIn                      *flowrate.Monitor
+	UserAgent                 atomic.Pointer[string]
+	Address                   netip.AddrPort
+	peerChoked                atomic.Bool
+	peerInterested            atomic.Bool
+	imChoked                  atomic.Bool
+	imInterested              atomic.Bool
+	QueueLimit                atomic.Uint32
+	closed                    atomic.Bool
+	m                         sync.Mutex
+	wm                        sync.Mutex
+	bitfieldSize              uint32
 	supportFastExtension      bool
 	supportExtensionHandshake bool
-	UserAgent                 atomic.Pointer[string]
-	closed                    atomic.Bool
 }
 
 func (p *Peer) Response(res proto.ChunkResponse) {
@@ -137,7 +138,7 @@ func (p *Peer) Response(res proto.ChunkResponse) {
 }
 
 func (p *Peer) Request(req proto.ChunkRequest) {
-	if p.requests.Size() > 256 {
+	if p.requests.Size() > int(p.QueueLimit.Load()) {
 		return
 	}
 
@@ -296,6 +297,9 @@ func (p *Peer) start(skipHandshake bool) {
 			if event.ExtHandshake.V.Set {
 				p.UserAgent.Store(&event.ExtHandshake.V.Value)
 			}
+			if event.ExtHandshake.QueueLength.Set {
+				p.QueueLimit.Store(event.ExtHandshake.QueueLength.Value)
+			}
 
 		// TODO
 		case proto.Cancel:
@@ -320,7 +324,7 @@ func (p *Peer) sendEvent(e Event) error {
 	defer p.wm.Unlock()
 	p.log.Trace().Msgf("send %s", color.BlueString(e.Event.String()))
 
-	p.Conn.SetWriteDeadline(time.Now().Add(time.Minute * 3))
+	_ = p.Conn.SetWriteDeadline(time.Now().Add(time.Minute * 3))
 
 	p.lastSend.Store(lo.ToPtr(time.Now()))
 

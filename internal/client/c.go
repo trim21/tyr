@@ -23,6 +23,7 @@ import (
 	"tyr/internal/meta"
 	imse "tyr/internal/mse"
 	"tyr/internal/pkg/global"
+	"tyr/internal/pkg/global/tasks"
 	"tyr/internal/pkg/gslice"
 )
 
@@ -79,23 +80,22 @@ type Client struct {
 	http            *resty.Client
 	cancel          context.CancelFunc
 	downloadMap     map[meta.Hash]*Download
-	infoHashes      []meta.Hash
 	mseKeys         mse.SecretKeyIter
 	connChan        chan incomingConn
 	sem             *semaphore.Weighted
 	mseSelector     mse.CryptoSelector
 	ch              *ttlcache.Cache[netip.AddrPort, connHistory]
+	fh              map[string]*os.File
 	sessionPath     string
+	infoHashes      []meta.Hash
 	downloads       []*Download
 	checkQueue      []meta.Hash
 	Config          config.Config
 	connectionCount atomic.Uint32
 	m               sync.RWMutex
 	checkQueueLock  sync.Mutex
+	fLock           sync.Mutex
 	mseDisabled     bool
-
-	fLock sync.Mutex
-	fh    map[string]*os.File
 }
 
 func (c *Client) AddTorrent(m *metainfo.MetaInfo, info meta.Info, downloadPath string, tags []string) error {
@@ -117,7 +117,7 @@ func (c *Client) AddTorrent(m *metainfo.MetaInfo, info meta.Info, downloadPath s
 	c.downloadMap[info.Hash] = d
 	c.infoHashes = maps.Keys(c.downloadMap)
 
-	global.Pool.Submit(d.Init)
+	tasks.Submit(d.Init)
 
 	return nil
 }

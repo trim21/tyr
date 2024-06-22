@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/dustin/go-humanize"
 	"github.com/negrel/assert"
 	"github.com/trim21/errgo"
 
@@ -32,7 +31,7 @@ func (d *Download) initCheck() error {
 	var efs = make(map[int]*existingFile, len(d.info.Files)+1)
 	for i, tf := range d.info.Files {
 		p := tf.Path
-		f, e := tryAllocFile(i, filepath.Join(d.basePath, p), tf.Length)
+		f, e := tryAllocFile(i, filepath.Join(d.basePath, p), tf.Length, d.c.Config.App.Fallocate.Load())
 		if e != nil {
 			return e
 		}
@@ -96,21 +95,7 @@ func (d *Download) initCheck() error {
 		}
 	}
 
-	d.log.Debug().Msgf("done size %s", humanize.IBytes(uint64(d.bm.Count())*uint64(d.info.PieceLength)))
-
-	//d.m.Lock()
-	d.state = Downloading
-	//d.m.Unlock()
-	//d.cond.Broadcast()
-
-	//d.Start()
-
 	return nil
-}
-
-// update progress by bitmap
-func (d *Download) updateProgress() {
-	d.completed.Store(int64(d.info.NumPieces) * int64(d.bm.Count()))
 }
 
 func (d *Download) buildPieceToCheck(efs map[int]*existingFile) []uint32 {
@@ -210,7 +195,7 @@ func pieceFileInfos(i uint32, info meta.Info) []pieceInfoFileChunk {
 	return result
 }
 
-func tryAllocFile(index int, path string, size int64) (*existingFile, error) {
+func tryAllocFile(index int, path string, size int64, doAlloc bool) (*existingFile, error) {
 	f, err := os.OpenFile(path, os.O_WRONLY, 0)
 	if err != nil {
 		if !os.IsNotExist(err) {

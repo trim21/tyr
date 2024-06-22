@@ -11,11 +11,12 @@ import (
 	"time"
 
 	"github.com/docker/go-units"
+	"github.com/dustin/go-humanize"
 	"github.com/labstack/echo/v4"
 
 	"tyr/internal/meta"
 	"tyr/internal/pkg/bufpool"
-	"tyr/internal/pkg/global"
+	"tyr/internal/pkg/global/tasks"
 	"tyr/internal/proto"
 )
 
@@ -55,6 +56,14 @@ func (d *Download) Init() {
 	if err != nil {
 		d.setError(err)
 		d.log.Err(err).Msg("failed to initCheck torrent data")
+	}
+
+	d.log.Debug().Msgf("done size %s", humanize.IBytes(uint64(d.bm.Count())*uint64(d.info.PieceLength)))
+
+	if d.bm.Count() == d.info.NumPieces {
+		d.state = Uploading
+	} else {
+		d.state = Downloading
 	}
 
 	go d.startBackground()
@@ -135,7 +144,7 @@ func (p *PriorityQueue) Pop() Priority {
 
 func (d *Download) have(index uint32) {
 	d.conn.Range(func(addr netip.AddrPort, p *Peer) bool {
-		global.Pool.Submit(func() {
+		tasks.Submit(func() {
 			p.Have(index)
 		})
 		return true
@@ -199,7 +208,7 @@ func (d *Download) handleRes(res proto.ChunkResponse) {
 			return
 		}
 
-		global.Pool.Submit(func() {
+		tasks.Submit(func() {
 			defer bufpool.Put(piece)
 			pieces := d.pieceInfo[res.PieceIndex]
 			var offset int64 = 0
@@ -232,8 +241,14 @@ func (d *Download) handleRes(res proto.ChunkResponse) {
 
 			d.bm.Set(res.PieceIndex)
 
-			d.log.Info().Msgf("piece %d done", res.PieceIndex)
+			d.log.Trace().Msgf("piece %d done", res.PieceIndex)
 			d.have(res.PieceIndex)
+
+			if d.bm.Count() == d.info.NumPieces {
+				d.m.Lock()
+				d.state = Uploading
+				d.m.Unlock()
+			}
 		})
 	}
 
@@ -242,69 +257,66 @@ func (d *Download) handleRes(res proto.ChunkResponse) {
 
 func (d *Download) backgroundPieceHandle() {
 	for {
-		time.Sleep(time.Second * 5)
-
-		if d.ctx.Err() != nil {
+		select {
+		case <-d.ctx.Done():
 			return
-		}
-		d.m.Lock()
-		if d.state == Uploading {
-			d.cond.Wait()
-		}
-		d.m.Unlock()
+		default:
+			if d.ctx.Err() != nil {
+				return
+			}
+			d.m.Lock()
+			if d.state == Uploading {
+				d.cond.Wait()
+			}
+			d.m.Unlock()
 
-		//d.log.Debug().Msg("backgroundPieceHandle")
+			//d.log.Debug().Msg("backgroundPieceHandle")
 
-		//weight := avaPool.Get()
+			//weight := avaPool.Get()
 
-		//if cap(weight) < int(d.numPieces) {
-		//}
-		//var h heap.Interface[pair.Pair[uint32, uint32]]
-		//weight := make([]pair.Pair[uint32, uint32], 0, int(d.numPieces))
+			//if cap(weight) < int(d.numPieces) {
+			//}
+			//var h heap.Interface[pair.Pair[uint32, uint32]]
+			//weight := make([]pair.Pair[uint32, uint32], 0, int(d.numPieces))
 
-		d.log.Trace().Msgf("connections %d", d.conn.Size())
+			d.log.Trace().Msgf("connections %d", d.conn.Size())
 
-		if d.seq.Load() {
-			d.scheduleSeq()
-			continue
-		}
-
-		h := make(PriorityQueue, d.info.NumPieces)
-
-		for i := range h {
-			h[i].Index = uint32(i)
-		}
-
-		d.conn.Range(func(key netip.AddrPort, p *Peer) bool {
-			if p.Bitmap.Count() == 0 {
-				return true
+			if d.seq.Load() {
+				d.scheduleSeq()
+				continue
 			}
 
-			p.Bitmap.Range(func(i uint32) {
-				h[i].Weight++
+			h := make(PriorityQueue, d.info.NumPieces)
+
+			for i := range h {
+				h[i].Index = uint32(i)
+			}
+
+			d.conn.Range(func(key netip.AddrPort, p *Peer) bool {
+				if p.Bitmap.Count() == 0 {
+					return true
+				}
+
+				p.Bitmap.Range(func(i uint32) {
+					h[i].Weight++
+				})
+
+				return true
 			})
 
-			return true
-		})
+			sort.Sort(&h)
 
-		sort.Sort(&h)
+			for i, priority := range h {
+				if i > 5 {
+					break
+				}
 
-		for i, priority := range h {
-			if i > 5 {
-				break
+				fmt.Println(priority.Index, priority.Weight)
 			}
-
-			fmt.Println(priority.Index, priority.Weight)
 		}
-
 		//fmt.Println("index", v.Index)
 		//avaPool.Put(weight)
 	}
-}
-
-type peerRes struct {
-	addr netip.AddrPort
-	res  proto.ChunkResponse
 }
 
 type downloadReq struct {
@@ -350,14 +362,13 @@ func buildPieceChunk(info meta.Info) [][]proto.ChunkRequest {
 }
 
 func (d *Download) scheduleSeq() {
+	var found = 0
 	for pi, chunks := range d.pieceChunks {
 		index := uint32(pi)
 
 		if d.bm.Get(index) {
 			continue
 		}
-
-		found := false
 
 		d.conn.Range(func(addr netip.AddrPort, p *Peer) bool {
 			if !p.Bitmap.Get(index) {
@@ -368,12 +379,12 @@ func (d *Download) scheduleSeq() {
 				p.Request(chunk)
 			}
 
-			found = true
+			found++
 
 			return false
 		})
 
-		if found {
+		if found > 20 {
 			break
 		}
 	}

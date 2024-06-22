@@ -12,7 +12,7 @@ import (
 	"github.com/trim21/errgo"
 
 	"tyr/internal/mse"
-	"tyr/internal/pkg/global"
+	"tyr/internal/pkg/global/tasks"
 	"tyr/internal/proto"
 )
 
@@ -108,7 +108,7 @@ func (c *Client) startListen() error {
 			}
 
 			// handle mse
-			global.Pool.Submit(func() {
+			go func() {
 				c.m.RLock()
 				keys := c.infoHashes
 				c.m.RUnlock()
@@ -125,7 +125,7 @@ func (c *Client) startListen() error {
 					addr: lo.Must(netip.ParseAddrPort(conn.RemoteAddr().String())),
 					conn: rwc,
 				}
-			})
+			}()
 		}
 	}()
 	return nil
@@ -137,7 +137,7 @@ func (c *Client) handleConn() {
 		case <-c.ctx.Done():
 			return
 		case conn := <-c.connChan:
-			global.Pool.Submit(func() {
+			tasks.Submit(func() {
 				h, err := proto.ReadHandshake(conn.conn)
 				if err != nil {
 					c.sem.Release(1)

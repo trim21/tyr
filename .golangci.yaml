@@ -42,11 +42,19 @@ linters-settings:
       - unusedresult
       - unusedwrite
 
+  depguard:
+    rules:
+      main:
+        deny:
+          - pkg: "sync/atomic"
+            desc: use uber atomic package
+
 linters:
   # See the dedicated "linters" documentation section.
   enable:
     - govet
     - exhaustive
+    - depguard
 
   disable:
     - errcheck

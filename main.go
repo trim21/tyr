@@ -15,7 +15,6 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/types/infohash"
 	"github.com/negrel/assert"
-	"github.com/pkg/profile"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/samber/lo"
@@ -48,8 +47,6 @@ func main() {
 	pflag.Bool("log-json", false, "log as json format")
 	pflag.String("log-level", "error", "log level")
 
-	pflag.Bool("profile-cpu", false, "enable CPU profiling only")
-	pflag.Bool("profile-memory", false, "enable Memory profiling only")
 	pflag.Bool("debug", false, "enable debug mode")
 
 	// this avoids 'pflag: help requested' error when calling for help message.
@@ -69,28 +66,8 @@ func main() {
 
 	debug := viper.GetBool("debug")
 	if debug {
+		runtime.SetBlockProfileRate(10000)
 		_, _ = fmt.Fprintln(os.Stderr, "enable debug mode")
-	}
-
-	profileMem := viper.GetBool("profile-memory")
-	profileCpu := viper.GetBool("profile-cpu")
-
-	if profileCpu || profileMem {
-		if profileCpu && profileMem {
-			errExit("can not use --profile-memory with --profile-cput")
-		}
-
-		var opt = make([]func(*profile.Profile), 0, 3)
-		opt = append(opt, profile.NoShutdownHook)
-		opt = append(opt, profile.ProfilePath("."))
-		if profileCpu {
-			opt = append(opt, profile.CPUProfile)
-		}
-		if profileMem {
-			opt = append(opt, profile.MemProfile)
-		}
-		_, _ = fmt.Fprintln(os.Stderr, "enable profiling")
-		defer profile.Start(opt...).Stop()
 	}
 
 	jsonLog := viper.GetBool("log-json")

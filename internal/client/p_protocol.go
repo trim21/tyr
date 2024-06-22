@@ -47,21 +47,22 @@ func (p *Peer) keepAlive() {
 type Event struct {
 	Bitmap       *bm.Bitmap
 	Res          proto.ChunkResponse
+	ExtHandshake extension
 	Req          proto.ChunkRequest
 	Index        uint32
+	Port         uint16
 	Event        proto.Message
 	keepAlive    bool
-	Port         uint16
-	ExtHandshake extension
 	Ignored      bool
 }
 
 type extension struct {
-	V null.String `bencode:"v"`
+	V           null.String `bencode:"v"`
+	QueueLength null.Uint32 `bencode:"reqq"`
 }
 
 func (p *Peer) DecodeEvents() (Event, error) {
-	p.Conn.SetReadDeadline(time.Now().Add(time.Minute * 4))
+	_ = p.Conn.SetReadDeadline(time.Now().Add(time.Minute * 4))
 
 	var b [4]byte
 	n, err := io.ReadFull(p.Conn, b[:])

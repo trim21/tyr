@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	stdSync "sync/atomic"
 	"time"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -37,11 +36,6 @@ const Checking State = 3
 const Moving State = 3
 const Error State = 4
 
-type peerRequest struct {
-	peer *Peer
-	req  proto.ChunkRequest
-}
-
 // Download manage a download task
 // ctx should be canceled when torrent is removed, not stopped.
 type Download struct {
@@ -59,43 +53,36 @@ type Download struct {
 	conn              *xsync.MapOf[netip.AddrPort, *Peer]
 	connectionHistory *xsync.MapOf[netip.AddrPort, connHistory]
 	bm                *bm.Bitmap
-
-	pdMutex     sync.RWMutex
-	pieceData   map[uint32][]*proto.ChunkResponse
-	pieceChunks [][]proto.ChunkRequest
-
-	basePath        string
-	key             string
-	downloadDir     string
-	tags            []string
-	pieceInfo       []pieceFileChunks
-	trackers        []TrackerTier
-	peers           []netip.AddrPort
-	AddAt           int64
-	CompletedAt     atomic.Int64
-	info            meta.Info
-	downloaded      atomic.Int64
-	corrupted       atomic.Int64
-	done            atomic.Bool
-	uploaded        atomic.Int64
-	completed       atomic.Int64
-	checkProgress   atomic.Int64
-	uploadAtStart   int64
-	downloadAtStart int64
-	lazyInitialized atomic.Bool
-	seq             atomic.Bool
-	m               sync.RWMutex
-	peersMutex      sync.RWMutex
-	connMutex       sync.RWMutex
-	announcePending stdSync.Bool
-	peerID          PeerID
-	state           State
-	private         bool
-}
-
-type pieceChunk struct {
-	data   []byte
-	offset uint32
+	pieceData         map[uint32][]*proto.ChunkResponse
+	basePath          string
+	key               string
+	downloadDir       string
+	pieceChunks       [][]proto.ChunkRequest
+	tags              []string
+	pieceInfo         []pieceFileChunks
+	trackers          []TrackerTier
+	peers             []netip.AddrPort
+	info              meta.Info
+	AddAt             int64
+	CompletedAt       atomic.Int64
+	downloaded        atomic.Int64
+	corrupted         atomic.Int64
+	done              atomic.Bool
+	uploaded          atomic.Int64
+	completed         atomic.Int64
+	checkProgress     atomic.Int64
+	uploadAtStart     int64
+	downloadAtStart   int64
+	lazyInitialized   atomic.Bool
+	seq               atomic.Bool
+	announcePending   atomic.Bool
+	pdMutex           sync.RWMutex
+	m                 sync.RWMutex
+	peersMutex        sync.RWMutex
+	connMutex         sync.RWMutex
+	peerID            PeerID
+	state             State
+	private           bool
 }
 
 func (c *Client) NewDownload(m *metainfo.MetaInfo, info meta.Info, basePath string, tags []string) *Download {
@@ -134,8 +121,6 @@ func (c *Client) NewDownload(m *metainfo.MetaInfo, info meta.Info, basePath stri
 		pieceData:   make(map[uint32][]*proto.ChunkResponse, 20),
 		pieceChunks: buildPieceChunk(info),
 
-		//key:
-		// there maybe 1 uint64 extra data here.
 		bm: bm.New(info.NumPieces),
 
 		downloadDir: basePath,
@@ -166,10 +151,12 @@ func (d *Download) Display() string {
 	defer d.m.RUnlock()
 
 	_, _ = fmt.Fprintf(buf, "%s | %.20s | %.2f%% | %s | %s | %d ↓",
-		d.state, d.info.Name,
-		float64(int64(d.bm.Count())*d.info.PieceLength)/float64(d.info.TotalLength)*100.0,
+		d.state,
+		d.info.Name,
+		float64(int64(d.bm.Count())*d.info.PieceLength*10000/d.info.TotalLength)/100,
 		humanize.IBytes(uint64(d.downloaded.Load())),
-		d.ioDown.Status().RateString(), d.conn.Size())
+		d.ioDown.Status().RateString(), d.conn.Size(),
+	)
 
 	for _, tier := range d.trackers {
 		for _, t := range tier.trackers {

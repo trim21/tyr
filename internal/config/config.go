@@ -4,17 +4,20 @@ import (
 	"os"
 	"path/filepath"
 
+	"go.uber.org/atomic"
+
 	"github.com/BurntSushi/toml"
 	"github.com/trim21/errgo"
 )
 
 type Application struct {
-	DownloadDir     string `json:"download-dir"`
-	Crypto          string `json:"crypto"`
-	MaxHTTPParallel int    `json:"max-http-parallel"`
-	P2PPort         uint16 `json:"p2p-port"`
-	NumWant         uint16 `json:"num-want"`
-	PeersLimit      uint16 `json:"peers-limit"`
+	DownloadDir     string      `json:"download-dir"`
+	Crypto          string      `json:"crypto"`
+	MaxHTTPParallel int         `json:"max-http-parallel"`
+	P2PPort         uint16      `json:"p2p-port"`
+	NumWant         uint16      `json:"num-want"`
+	PeersLimit      uint16      `json:"peers-limit"`
+	Fallocate       atomic.Bool `json:"fallocate"`
 }
 
 type Config struct {

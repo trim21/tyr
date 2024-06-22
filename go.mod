@@ -20,7 +20,6 @@ require (
 	github.com/labstack/echo/v4 v4.12.0
 	github.com/negrel/assert v0.2.0
 	github.com/panjf2000/ants/v2 v2.10.0
-	github.com/pkg/profile v1.7.0
 	github.com/puzpuzpuz/xsync/v3 v3.1.0
 	github.com/rs/zerolog v1.33.0
 	github.com/samber/lo v1.39.0
@@ -52,9 +51,7 @@ require (
 	github.com/bits-and-blooms/bitset v1.12.0 // indirect
 	github.com/bool64/shared v0.1.5 // indirect
 	github.com/bradfitz/iter v0.0.0-20191230175014-e8f45d346db8 // indirect
-	github.com/felixge/fgprof v0.9.3 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
-	github.com/google/pprof v0.0.0-20221118152302-e6195bd50e26 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/huandu/xstrings v1.3.2 // indirect
 	github.com/iancoleman/orderedmap v0.3.0 // indirect

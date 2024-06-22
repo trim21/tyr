@@ -10,6 +10,7 @@ import (
 
 	"tyr/internal/mse"
 	"tyr/internal/pkg/global"
+	"tyr/internal/pkg/global/tasks"
 	"tyr/internal/proto"
 )
 
@@ -47,7 +48,7 @@ func (d *Download) connectToPeers() {
 
 		d.c.connectionCount.Add(1)
 
-		global.Pool.Submit(func() {
+		tasks.Submit(func() {
 			ch := connHistory{lastTry: time.Now()}
 			defer func(h connHistory) {
 				d.c.ch.Set(addr, h, time.Hour)

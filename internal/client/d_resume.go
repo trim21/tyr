@@ -10,11 +10,11 @@ var _ encoding.BinaryMarshaler = (*Download)(nil)
 var _ encoding.BinaryUnmarshaler = (*Download)(nil)
 
 type resume struct {
-	AddAt       int64
-	CompletedAt int64
 	BasePath    string
 	Bitmap      []byte
 	Tags        []string
+	AddAt       int64
+	CompletedAt int64
 	Downloaded  int64
 	Uploaded    int64
 	State       State
