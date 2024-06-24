@@ -3,7 +3,6 @@ package web
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"fmt"
 	"path/filepath"
 
@@ -15,29 +14,25 @@ import (
 
 	"tyr/internal/core"
 	"tyr/internal/meta"
+	"tyr/internal/pkg/unsafe"
 	"tyr/internal/web/jsonrpc"
 )
 
-type AddTorrentReq struct {
-	TorrentFile string   `json:"torrent_file" description:"base64 encoded torrent file content"`
-	DownloadDir string   `json:"download_dir" description:"base64 encoded download dir"`
+type AddTorrentRequest struct {
+	TorrentFile string   `json:"torrent_file" format:"base64" required:"true" description:"base64 encoded torrent file content" validate:"required"`
+	DownloadDir string   `json:"download_dir" description:"download dir"`
 	Tags        []string `json:"tags"`
 	IsBaseDir   bool     `json:"is_base_dir" description:"if true, will not append torrent name to download_dir"`
 }
 
-type AddTorrentRes struct {
+type AddTorrentResponse struct {
 	InfoHash string `json:"info_hash" description:"torrent file hash"`
 }
 
 func AddTorrent(h *jsonrpc.Handler, c *core.Client) {
-	u := usecase.NewInteractor[*AddTorrentReq, AddTorrentRes](
-		func(ctx context.Context, req *AddTorrentReq, res *AddTorrentRes) error {
-			raw, err := base64.StdEncoding.DecodeString(req.TorrentFile)
-			if err != nil {
-				return CodeError(1, errgo.Wrap(err, "torrent is not valid base64 data"))
-			}
-
-			m, err := metainfo.Load(bytes.NewBuffer(raw))
+	u := usecase.NewInteractor[*AddTorrentRequest, AddTorrentResponse](
+		func(ctx context.Context, req *AddTorrentRequest, res *AddTorrentResponse) error {
+			m, err := metainfo.Load(bytes.NewBuffer(unsafe.Bytes(req.TorrentFile)))
 			if err != nil {
 				return CodeError(2, errgo.Wrap(err, "failed to parse torrent file"))
 			}
@@ -71,7 +66,7 @@ func AddTorrent(h *jsonrpc.Handler, c *core.Client) {
 				return CodeError(5, errgo.Wrap(err, "failed to add torrent to download"))
 			}
 
-			*res = AddTorrentRes{InfoHash: m.HashInfoBytes().HexString()}
+			*res = AddTorrentResponse{InfoHash: m.HashInfoBytes().HexString()}
 			return nil
 		},
 	)

@@ -11,6 +11,8 @@ import (
 	"reflect"
 	"sync"
 
+	"github.com/go-playground/validator/v10"
+	"github.com/swaggest/openapi-go"
 	"github.com/swaggest/usecase"
 )
 
@@ -31,11 +33,10 @@ const ver = "2.0"
 // Handler serves JSON-RPC 2.0 methods with HTTP.
 type Handler struct {
 	OpenAPI     *OpenAPI
-	Validator   Validator
+	Validator   *validator.Validate
 	Middlewares []usecase.Middleware
 
 	SkipParamsValidation bool
-	SkipResultValidation bool
 
 	methods map[string]method
 }
@@ -116,7 +117,10 @@ func (h *Handler) Add(u usecase.Interactor) {
 	h.methods[withName.Name()] = m
 
 	if h.OpenAPI != nil {
-		err := h.OpenAPI.Collect(withName.Name(), u, h.Validator)
+		err := h.OpenAPI.Collect(withName.Name(), u, func(op openapi.OperationContext) error {
+			op.AddSecurity("api-key")
+			return nil
+		})
 		if err != nil {
 			panic(fmt.Sprintf("failed to add to OpenAPI schema: %s", err.Error()))
 		}
@@ -320,18 +324,6 @@ func (h *Handler) encode(ctx context.Context, m method, req Request, resp *Respo
 		return
 	}
 
-	if h.Validator != nil && !h.SkipResultValidation {
-		if err := h.Validator.ValidateResult(req.Method, data); err != nil {
-			if m.failingUseCase != nil {
-				err = m.failingUseCase.Interact(context.WithValue(ctx, errCtxKey{}, err), nil, nil)
-			}
-
-			h.errResp(resp, "invalid result", CodeInternalError, err)
-
-			return
-		}
-	}
-
 	resp.Result = data
 }
 
@@ -347,7 +339,7 @@ func (h *Handler) decode(ctx context.Context, m method, req Request, resp *Respo
 	}
 
 	if h.Validator != nil && !h.SkipParamsValidation {
-		if err := h.Validator.ValidateParams(req.Method, req.Params); err != nil {
+		if err := h.Validator.Struct(input); err != nil {
 			if m.failingUseCase != nil {
 				err = m.failingUseCase.Interact(context.WithValue(ctx, errCtxKey{}, err), nil, nil)
 			}

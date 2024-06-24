@@ -231,7 +231,7 @@ func (d *Download) handleRes(res proto.ChunkResponse) {
 
 	chunks, ok := d.pieceData[res.PieceIndex]
 	if !ok {
-		chunks = make([]*proto.ChunkResponse, len(d.pieceChunks[res.PieceIndex]))
+		chunks = make([]*proto.ChunkResponse, (d.pieceLength(res.PieceIndex)+defaultBlockSize-1)/defaultBlockSize)
 	}
 
 	pi := res.Begin / defaultBlockSize
@@ -387,45 +387,43 @@ type downloadReq struct {
 	r    proto.ChunkRequest
 }
 
+func pieceChunk(pieceIndex uint32, info meta.Info) []proto.ChunkRequest {
+	var numPerPiece = (info.PieceLength + defaultBlockSize - 1) / defaultBlockSize
+
+	var rr = make([]proto.ChunkRequest, 0, numPerPiece)
+
+	pieceStart := int64(pieceIndex) * info.PieceLength
+
+	pieceLen := min(info.PieceLength, info.TotalLength-pieceStart)
+
+	for n := int64(0); n < numPerPiece; n++ {
+		begin := defaultBlockSize * int64(n)
+		if pieceLen-begin < 0 {
+			break
+		}
+		length := as.Uint32(min(pieceLen-begin, defaultBlockSize))
+
+		if length <= 0 {
+			break
+		}
+
+		rr = append(rr, proto.ChunkRequest{
+			PieceIndex: pieceIndex,
+			Begin:      uint32(begin),
+			Length:     length,
+		})
+	}
+
+	return rr
+}
+
+// TODO: use too much memory
 func buildPieceChunk(info meta.Info) [][]proto.ChunkRequest {
 	log.Debug().Stringer("info_hash", info.Hash).Msg("build piece chunk")
 	var result = make([][]proto.ChunkRequest, 0, (info.PieceLength+defaultBlockSize-1)/defaultBlockSize*int64(info.NumPieces))
 
-	var numPerPiece = (info.PieceLength + defaultBlockSize - 1) / defaultBlockSize
-
 	for i := uint32(0); i < info.NumPieces; i++ {
-		var rr = make([]proto.ChunkRequest, 0, 1)
-
-		pieceStart := int64(i) * info.PieceLength
-
-		pieceLen := min(info.PieceLength, info.TotalLength-pieceStart)
-
-		for n := int64(0); n < numPerPiece; n++ {
-			begin := defaultBlockSize * int64(n)
-			//if i == info.NumPieces-1 {
-			//	fmt.Println(pieceLen - begin)
-			//}
-			if pieceLen-begin < 0 {
-				break
-			}
-			length := as.Uint32(min(pieceLen-begin, defaultBlockSize))
-
-			if length <= 0 {
-				break
-			}
-
-			rr = append(rr, proto.ChunkRequest{
-				PieceIndex: i,
-				Begin:      uint32(begin),
-				Length:     length,
-			})
-		}
-
-		if len(rr) == 0 {
-			break
-		}
-
-		result = append(result, rr)
+		result = append(result, pieceChunk(i, info))
 	}
 
 	if len(result) == 0 {
@@ -469,40 +467,17 @@ func nestedSizeOf(rv reflect.Value) uintptr {
 	return sum
 }
 
-func pieceChunks(info meta.Info, index uint32) []proto.ChunkRequest {
-	var numPerPiece = (info.PieceLength + defaultBlockSize - 1) / defaultBlockSize
-	var rr = make([]proto.ChunkRequest, 0, numPerPiece)
-
-	pieceStart := int64(index) * info.PieceLength
-
-	pieceLen := min(info.PieceLength, info.TotalLength-pieceStart)
-
-	for n := int64(0); n < numPerPiece; n++ {
-		begin := defaultBlockSize * int64(n)
-		length := uint32(min(pieceLen-begin, defaultBlockSize))
-
-		if length <= 0 {
-			break
-		}
-
-		rr = append(rr, proto.ChunkRequest{
-			PieceIndex: index,
-			Begin:      uint32(begin),
-			Length:     length,
-		})
-	}
-
-	return rr
-}
-
 func (d *Download) scheduleSeq() {
 	var found int64 = 0
 
-	for pi, chunks := range d.pieceChunks {
-		index := uint32(pi)
+	for index := uint32(0); index < d.info.NumPieces; index++ {
+		//for pi, chunks := range d.pieceChunks {
+		//	index := uint32(pi)
 		if d.bm.Get(index) {
 			continue
 		}
+
+		chunks := pieceChunks(d.info, index)
 
 		send := false
 		d.conn.Range(func(addr netip.AddrPort, p *Peer) bool {
@@ -529,4 +504,5 @@ func (d *Download) scheduleSeq() {
 			break
 		}
 	}
+	//}
 }

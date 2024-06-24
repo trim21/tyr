@@ -12,6 +12,7 @@ import (
 
 	"tyr/internal/meta"
 	"tyr/internal/pkg/fallocate"
+	"tyr/internal/pkg/gctx"
 )
 
 type existingFile struct {
@@ -43,17 +44,10 @@ func (d *Download) initCheck() error {
 		return nil
 	}
 
-	//buf := bytebufferpool.Get()
-	//defer bytebufferpool.Put(buf)
-	//if cap(buf.B) <= int(d.info.PieceLength) {
-	//	buf.B = make([]byte, d.info.PieceLength)
-	//}
-	//buf.Reset()
-
 	var fileSeekCache = make(map[int]int64, len(d.info.Files))
-	var fileOpenCache = make(map[int]*os.File, len(d.info.Files))
+	var fileOpenCaches = make(map[int]*os.File, len(d.info.Files))
 	defer func() {
-		for _, file := range fileOpenCache {
+		for _, file := range fileOpenCaches {
 			_ = file.Close()
 		}
 	}()
@@ -66,14 +60,14 @@ func (d *Download) initCheck() error {
 		piece := d.pieceInfo[index]
 		sum := sha1.New()
 		for _, chunk := range piece.fileChunks {
-			f, ok := fileOpenCache[chunk.fileIndex]
+			f, ok := fileOpenCaches[chunk.fileIndex]
 			fp := filepath.Join(d.basePath, d.info.Files[chunk.fileIndex].Path)
 			if !ok {
 				f, err = os.Open(fp)
 				if err != nil {
 					return errgo.Wrap(err, fmt.Sprintf("failed to open file %s", fp))
 				}
-				fileOpenCache[chunk.fileIndex] = f
+				fileOpenCaches[chunk.fileIndex] = f
 			}
 
 			if fileSeekCache[chunk.fileIndex] != chunk.offsetOfFile {
@@ -84,7 +78,7 @@ func (d *Download) initCheck() error {
 			}
 
 			//_, err = d.ioDown.IO(io.ReadFull(f, buf.B[size:size+chunk.length]))
-			_, err = d.ioDown.IO64(io.CopyN(sum, f, chunk.length))
+			_, err = d.ioDown.IO64(io.CopyN(sum, gctx.NewReader(d.ctx, f), chunk.length))
 			if err != nil {
 				return errgo.Wrap(err, fmt.Sprintf("failed to read file %s", fp))
 			}

@@ -15,11 +15,9 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/types/infohash"
 	"github.com/dustin/go-humanize"
-	"github.com/negrel/assert"
 	"github.com/puzpuzpuz/xsync/v3"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"github.com/samber/lo"
 	"github.com/valyala/bytebufferpool"
 	"go.uber.org/atomic"
 
@@ -43,7 +41,6 @@ const Error State = 4
 // Download manage a download task
 // ctx should be canceled when torrent is removed, not stopped.
 type Download struct {
-	meta              metainfo.MetaInfo
 	log               zerolog.Logger
 	ctx               context.Context
 	err               error
@@ -61,32 +58,32 @@ type Download struct {
 	basePath          string
 	key               string
 	downloadDir       string
-	pieceChunks       [][]proto.ChunkRequest
-	tags              []string
-	pieceInfo         []pieceFileChunks
-	trackers          []TrackerTier
-	peers             *peersHeap
-	info              meta.Info
-	AddAt             int64
-	CompletedAt       atomic.Int64
-	downloaded        atomic.Int64
-	corrupted         atomic.Int64
-	done              atomic.Bool
-	uploaded          atomic.Int64
-	completed         atomic.Int64
-	checkProgress     atomic.Int64
-	uploadAtStart     int64
-	downloadAtStart   int64
-	lazyInitialized   atomic.Bool
-	seq               atomic.Bool
-	announcePending   atomic.Bool
-	pdMutex           sync.RWMutex
-	m                 sync.RWMutex
-	peersMutex        sync.RWMutex
-	connMutex         sync.RWMutex
-	peerID            PeerID
-	state             State
-	private           bool
+	//pieceChunks       [][]proto.ChunkRequest
+	tags            []string
+	pieceInfo       []pieceFileChunks
+	trackers        []TrackerTier
+	peers           *peersHeap
+	info            meta.Info
+	AddAt           int64
+	CompletedAt     atomic.Int64
+	downloaded      atomic.Int64
+	corrupted       atomic.Int64
+	done            atomic.Bool
+	uploaded        atomic.Int64
+	completed       atomic.Int64
+	checkProgress   atomic.Int64
+	uploadAtStart   int64
+	downloadAtStart int64
+	lazyInitialized atomic.Bool
+	seq             atomic.Bool
+	announcePending atomic.Bool
+	pdMutex         sync.RWMutex
+	m               sync.RWMutex
+	peersMutex      sync.RWMutex
+	connMutex       sync.RWMutex
+	peerID          PeerID
+	state           State
+	private         bool
 
 	fileOpenMutex *sync.Cond
 	fileOpenCache map[int]*fileOpenCache
@@ -105,7 +102,6 @@ func (c *Client) NewDownload(m *metainfo.MetaInfo, info meta.Info, basePath stri
 		ctx:      ctx,
 		info:     info,
 		cancel:   cancel,
-		meta:     *m,
 		c:        c,
 		log:      log.With().Stringer("info_hash", info.Hash).Logger(),
 		state:    Checking,
@@ -132,9 +128,9 @@ func (c *Client) NewDownload(m *metainfo.MetaInfo, info meta.Info, basePath stri
 			},
 		},
 
-		pieceInfo:   buildPieceInfos(info),
-		pieceData:   make(map[uint32][]*proto.ChunkResponse, 20),
-		pieceChunks: buildPieceChunk(info),
+		pieceInfo: buildPieceInfos(info),
+		pieceData: make(map[uint32][]*proto.ChunkResponse, 20),
+		//pieceChunks: buildPieceChunk(info),
 
 		private: info.Private,
 
@@ -147,10 +143,10 @@ func (c *Client) NewDownload(m *metainfo.MetaInfo, info meta.Info, basePath stri
 		fileOpenCache: make(map[int]*fileOpenCache),
 	}
 
-	if global.Dev {
-		piece := lo.Must(lo.Last(d.pieceChunks))
-		assert.LessOrEqual(piece[len(piece)-1].Length, uint32(defaultBlockSize))
-	}
+	//if global.Dev {
+	//	piece := lo.Must(lo.Last(d.pieceChunks))
+	//	assert.LessOrEqual(piece[len(piece)-1].Length, uint32(defaultBlockSize))
+	//}
 
 	d.seq.Store(true)
 	d.cond = sync.NewCond(&d.m)

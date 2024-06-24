@@ -1,16 +1,14 @@
 package web
 
-import "tyr/internal/web/jsonrpc"
-
-func CodeError(code jsonrpc.ErrorCode, err error) jsonrpc.ErrWithAppCode {
-	return resError{err, code}
+func CodeError(code int, err error) error {
+	return resError{error: err, code: code}
 }
 
 type resError struct {
 	error
-	code jsonrpc.ErrorCode
+	code int
 }
 
-func (r resError) AppErrCode() jsonrpc.ErrorCode {
+func (r resError) AppErrCode() int {
 	return r.code
 }

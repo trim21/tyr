@@ -4,10 +4,16 @@ import (
 	_ "embed"
 	"encoding/json"
 	"net/http"
+	"reflect"
+	"strings"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v4"
+	"github.com/rs/zerolog/log"
+	"github.com/swaggest/openapi-go"
 	"github.com/swaggest/swgui"
 	"github.com/swaggest/swgui/v5"
+	"github.com/ziflex/lecho/v3"
 
 	"tyr/internal/core"
 	"tyr/internal/web/internal/prof"
@@ -26,18 +32,29 @@ func New(c *core.Client, token string, debug bool) http.Handler {
 	apiSchema.Reflector().SpecEns().Info.Title = "JSON-RPC"
 	apiSchema.Reflector().SpecEns().Info.Version = "0.0.1"
 	apiSchema.Reflector().SpecEns().Info.WithDescription(desc)
+	apiSchema.Reflector().SpecEns().SetAPIKeySecurity("api-key", echo.HeaderAuthorization, openapi.InHeader, "need set api header")
+
+	v := validator.New()
+
+	v.RegisterTagNameFunc(func(fld reflect.StructField) string {
+		name := strings.SplitN(fld.Tag.Get("json"), ",", 2)[0]
+		if name == "-" {
+			return ""
+		}
+		return name
+	})
 
 	h := &jsonrpc.Handler{
-		OpenAPI:              &apiSchema,
-		Validator:            &jsonrpc.JSONSchemaValidator{},
-		SkipResultValidation: true,
+		OpenAPI:   &apiSchema,
+		Validator: v,
 	}
 
-	r := echo.New()
+	server := echo.New()
+	server.Logger = lecho.From(log.Logger)
 
 	if debug {
-		r.Debug = true
-		prof.Wrap(r)
+		server.Debug = true
+		prof.Wrap(server)
 	}
 
 	AddTorrent(h, c)
@@ -70,17 +87,17 @@ func New(c *core.Client, token string, debug bool) http.Handler {
 		}
 	}
 
-	r.POST("/json_rpc", echo.WrapHandler(h), auth)
+	server.POST("/json_rpc", echo.WrapHandler(h), auth)
 
-	r.GET("/docs/openapi.json", echo.WrapHandler(h.OpenAPI))
-	r.GET("/docs/*", echo.WrapHandler(v5.NewHandlerWithConfig(swgui.Config{
+	server.GET("/docs/openapi.json", echo.WrapHandler(h.OpenAPI))
+	server.GET("/docs/*", echo.WrapHandler(v5.NewHandlerWithConfig(swgui.Config{
 		Title:       apiSchema.Reflector().Spec.Info.Title,
 		SwaggerJSON: "/docs/openapi.json",
 		BasePath:    "/docs/",
 		SettingsUI:  jsonrpc.SwguiSettings(nil, "/json_rpc"),
 	})))
 
-	r.StaticFS("/", frontendFS)
+	server.StaticFS("/", frontendFS)
 
-	return r
+	return server
 }
