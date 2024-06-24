@@ -1,4 +1,4 @@
-package client
+package core
 
 import (
 	"crypto/sha1"
@@ -9,8 +9,6 @@ import (
 
 	"github.com/negrel/assert"
 	"github.com/trim21/errgo"
-
-	"github.com/valyala/bytebufferpool"
 
 	"tyr/internal/meta"
 	"tyr/internal/pkg/fallocate"
@@ -45,12 +43,12 @@ func (d *Download) initCheck() error {
 		return nil
 	}
 
-	buf := bytebufferpool.Get()
-	defer bytebufferpool.Put(buf)
-	if cap(buf.B) <= int(d.info.PieceLength) {
-		buf.B = make([]byte, d.info.PieceLength)
-	}
-	buf.Reset()
+	//buf := bytebufferpool.Get()
+	//defer bytebufferpool.Put(buf)
+	//if cap(buf.B) <= int(d.info.PieceLength) {
+	//	buf.B = make([]byte, d.info.PieceLength)
+	//}
+	//buf.Reset()
 
 	var fileSeekCache = make(map[int]int64, len(d.info.Files))
 	var fileOpenCache = make(map[int]*os.File, len(d.info.Files))
@@ -66,6 +64,7 @@ func (d *Download) initCheck() error {
 	for _, index := range h {
 		size = 0
 		piece := d.pieceInfo[index]
+		sum := sha1.New()
 		for _, chunk := range piece.fileChunks {
 			f, ok := fileOpenCache[chunk.fileIndex]
 			fp := filepath.Join(d.basePath, d.info.Files[chunk.fileIndex].Path)
@@ -84,7 +83,8 @@ func (d *Download) initCheck() error {
 				}
 			}
 
-			_, err = d.ioDown.IO(io.ReadFull(f, buf.B[size:size+chunk.length]))
+			//_, err = d.ioDown.IO(io.ReadFull(f, buf.B[size:size+chunk.length]))
+			_, err = d.ioDown.IO64(io.CopyN(sum, f, chunk.length))
 			if err != nil {
 				return errgo.Wrap(err, fmt.Sprintf("failed to read file %s", fp))
 			}
@@ -93,8 +93,7 @@ func (d *Download) initCheck() error {
 			fileSeekCache[chunk.fileIndex] = chunk.offsetOfFile + chunk.length
 		}
 
-		sum := sha1.Sum(buf.B[:size])
-		if sum == d.info.Pieces[index] {
+		if [sha1.Size]byte(sum.Sum(nil)) == d.info.Pieces[index] {
 			d.bm.Set(index)
 		}
 	}

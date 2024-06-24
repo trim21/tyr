@@ -1,4 +1,4 @@
-package client
+package core
 
 import (
 	"context"
@@ -15,9 +15,11 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/types/infohash"
 	"github.com/dustin/go-humanize"
+	"github.com/negrel/assert"
 	"github.com/puzpuzpuz/xsync/v3"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/samber/lo"
 	"github.com/valyala/bytebufferpool"
 	"go.uber.org/atomic"
 
@@ -145,6 +147,11 @@ func (c *Client) NewDownload(m *metainfo.MetaInfo, info meta.Info, basePath stri
 		fileOpenCache: make(map[int]*fileOpenCache),
 	}
 
+	if global.Dev {
+		piece := lo.Must(lo.Last(d.pieceChunks))
+		assert.LessOrEqual(piece[len(piece)-1].Length, uint32(defaultBlockSize))
+	}
+
 	d.seq.Store(true)
 	d.cond = sync.NewCond(&d.m)
 
@@ -173,20 +180,42 @@ func (d *Download) Display() string {
 
 	rate := d.ioDown.Status()
 
-	left := d.info.TotalLength - int64(d.bm.Count())*d.info.PieceLength
+	var completed int64
+
+	if !d.bm.Get(d.info.NumPieces - 1) {
+		completed = int64(d.bm.Count()) * d.info.PieceLength
+	} else {
+		completed = int64(d.bm.Count()-1)*d.info.PieceLength + d.info.LastPieceSize
+	}
+
+	left := d.info.TotalLength - completed
 
 	var eta time.Duration
 	if rate.CurRate != 0 {
-		eta = time.Second * time.Duration(left/(rate.CurRate))
+		eta = time.Second * time.Duration(left/rate.CurRate)
 	}
 
-	_, _ = fmt.Fprintf(buf, "%-12s | %s | %5.1f%% | %8s | %9s (%9s) ↓ | %6s | %d ",
+	if d.state == Downloading {
+		if d.info.NumPieces-d.bm.Count() < 10 {
+			for i := uint32(0); i < d.info.NumPieces; i++ {
+				if !d.bm.Get(i) {
+					fmt.Println("missing", i)
+				}
+			}
+		}
+	}
+
+	_, _ = fmt.Fprintf(buf, "%-12s | %s | %5.1f%% | %8s | %9s (%9s) ↓ | %8s | %6s | %d | %9s",
 		d.state.String(),
 		d.info.Hash,
-		float64(int64(d.bm.Count())*d.info.PieceLength*10000/d.info.TotalLength)/100,
+		float64(completed*1000/d.info.TotalLength)/10,
 		humanize.IBytes(uint64(d.info.TotalLength)),
 		humanize.IBytes(uint64(d.downloaded.Load())),
-		rate.RateString(), eta, d.conn.Size(),
+		rate.RateString(),
+		humanize.IBytes(uint64(left)),
+		eta,
+		d.conn.Size(),
+		humanize.IBytes(uint64(left)),
 	)
 
 	for _, tier := range d.trackers {

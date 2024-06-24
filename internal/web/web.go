@@ -9,7 +9,7 @@ import (
 	"github.com/swaggest/swgui"
 	"github.com/swaggest/swgui/v5"
 
-	"tyr/internal/client"
+	"tyr/internal/core"
 	"tyr/internal/web/internal/prof"
 	"tyr/internal/web/jsonrpc"
 )
@@ -21,7 +21,7 @@ type jsonRpcRequest struct {
 	ID json.RawMessage `json:"id"`
 }
 
-func New(c *client.Client, token string, debug bool) http.Handler {
+func New(c *core.Client, token string, debug bool) http.Handler {
 	apiSchema := jsonrpc.OpenAPI{}
 	apiSchema.Reflector().SpecEns().Info.Title = "JSON-RPC"
 	apiSchema.Reflector().SpecEns().Info.Version = "0.0.1"

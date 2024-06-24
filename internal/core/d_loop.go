@@ -1,4 +1,4 @@
-package client
+package core
 
 import (
 	"crypto/sha1"
@@ -11,12 +11,14 @@ import (
 	"sort"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/docker/go-units"
 	"github.com/dustin/go-humanize"
 	"github.com/labstack/echo/v4"
 	"github.com/rs/zerolog/log"
 
 	"tyr/internal/meta"
+	"tyr/internal/pkg/as"
 	"tyr/internal/pkg/bufpool"
 	"tyr/internal/pkg/global/tasks"
 	"tyr/internal/proto"
@@ -400,7 +402,13 @@ func buildPieceChunk(info meta.Info) [][]proto.ChunkRequest {
 
 		for n := int64(0); n < numPerPiece; n++ {
 			begin := defaultBlockSize * int64(n)
-			length := uint32(min(pieceLen-begin, defaultBlockSize))
+			//if i == info.NumPieces-1 {
+			//	fmt.Println(pieceLen - begin)
+			//}
+			if pieceLen-begin < 0 {
+				break
+			}
+			length := as.Uint32(min(pieceLen-begin, defaultBlockSize))
 
 			if length <= 0 {
 				break
@@ -502,7 +510,10 @@ func (d *Download) scheduleSeq() {
 				return true
 			}
 
-			for _, chunk := range chunks {
+			for i, chunk := range chunks {
+				if i == 25 {
+					spew.Dump(chunk)
+				}
 				p.Request(chunk)
 			}
 

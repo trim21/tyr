@@ -20,8 +20,8 @@ import (
 	"github.com/spf13/viper"
 	"go.uber.org/automaxprocs/maxprocs"
 
-	"tyr/internal/client"
 	"tyr/internal/config"
+	"tyr/internal/core"
 	"tyr/internal/meta"
 	"tyr/internal/pkg/empty"
 	"tyr/internal/pkg/random"
@@ -110,7 +110,7 @@ func main() {
 		_, _ = fmt.Fprintln(os.Stderr, "no web secret token, generating new token:", strconv.Quote(webToken))
 	}
 
-	app := client.New(cfg, sessionPath)
+	app := core.New(cfg, sessionPath)
 
 	if e := app.Start(); e != nil {
 		errExit("failed to listen on p2p port", e)

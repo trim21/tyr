@@ -79,6 +79,11 @@ func (m *Monitor) IO(n int, err error) (int, error) {
 	return m.Update(n), err
 }
 
+// IO64 is just like IO, but accept int64
+func (m *Monitor) IO64(n int64, err error) (int, error) {
+	return m.Update(int(n)), err
+}
+
 // Done marks the transfer as finished and prevents any further updates or
 // limiting. Instantaneous and current transfer rates drop to 0. Update, IO, and
 // Limit methods become NOOPs. It returns the total number of bytes transferred.

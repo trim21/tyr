@@ -13,7 +13,7 @@ import (
 	"github.com/swaggest/usecase"
 	"github.com/trim21/errgo"
 
-	"tyr/internal/client"
+	"tyr/internal/core"
 	"tyr/internal/meta"
 	"tyr/internal/web/jsonrpc"
 )
@@ -29,7 +29,7 @@ type AddTorrentRes struct {
 	InfoHash string `json:"info_hash" description:"torrent file hash"`
 }
 
-func AddTorrent(h *jsonrpc.Handler, c *client.Client) {
+func AddTorrent(h *jsonrpc.Handler, c *core.Client) {
 	u := usecase.NewInteractor[*AddTorrentReq, AddTorrentRes](
 		func(ctx context.Context, req *AddTorrentReq, res *AddTorrentRes) error {
 			raw, err := base64.StdEncoding.DecodeString(req.TorrentFile)

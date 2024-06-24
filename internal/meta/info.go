@@ -17,14 +17,15 @@ type File struct {
 }
 
 type Info struct {
-	Name        string
-	Pieces      []Hash
-	Files       []File
-	TotalLength int64
-	PieceLength int64
-	Hash        Hash
-	NumPieces   uint32
-	Private     bool
+	Name          string
+	Pieces        []Hash
+	Files         []File
+	TotalLength   int64
+	PieceLength   int64
+	LastPieceSize int64
+	Hash          Hash
+	NumPieces     uint32
+	Private       bool
 }
 
 var ErrNotV1Torrent = errors.New("meta info has no v1 info")
@@ -73,14 +74,15 @@ func FromTorrent(m metainfo.MetaInfo) (Info, error) {
 	}
 
 	i := Info{
-		Hash:        Hash(m.HashInfoBytes()),
-		Private:     null.NewFromPtr(info.Private).Value,
-		Name:        info.BestName(),
-		TotalLength: info.TotalLength(),
-		Pieces:      pieces,
-		NumPieces:   uint32(info.NumPieces()),
-		PieceLength: info.PieceLength,
-		Files:       files,
+		Hash:          Hash(m.HashInfoBytes()),
+		Private:       null.NewFromPtr(info.Private).Value,
+		Name:          info.BestName(),
+		TotalLength:   info.TotalLength(),
+		Pieces:        pieces,
+		NumPieces:     uint32(info.NumPieces()),
+		PieceLength:   info.PieceLength,
+		LastPieceSize: info.TotalLength() - info.PieceLength*int64(info.NumPieces()-1),
+		Files:         files,
 	}
 
 	if int64(i.NumPieces) != (i.TotalLength+i.PieceLength-1)/i.PieceLength {
