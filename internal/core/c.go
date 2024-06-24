@@ -15,8 +15,8 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/rs/zerolog/log"
+	"github.com/samber/lo"
 	"go.uber.org/atomic"
-	"golang.org/x/exp/maps"
 	"golang.org/x/sync/semaphore"
 
 	"tyr/internal/config"
@@ -125,7 +125,7 @@ func (c *Client) AddTorrent(m *metainfo.MetaInfo, info meta.Info, downloadPath s
 
 	c.downloads = append(c.downloads, d)
 	c.downloadMap[info.Hash] = d
-	c.infoHashes = maps.Keys(c.downloadMap)
+	c.infoHashes = lo.Keys(c.downloadMap)
 
 	tasks.Submit(d.Init)
 

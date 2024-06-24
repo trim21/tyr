@@ -10,6 +10,9 @@ func SwguiSettings(settingsUI map[string]string, rpcPath string) map[string]stri
 				if (request.loadSpec) {
 					return request;
 				}
+
+				console.log(JSON.parse(JSON.stringify(request)));
+
 				var url = window.location.protocol + '//'+ window.location.host;
 				var method = request.url.substring(url.length);
 				request.url = url + '` + rpcPath + `';

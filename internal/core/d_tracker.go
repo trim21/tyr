@@ -20,7 +20,6 @@ import (
 	"github.com/trim21/errgo"
 	"github.com/valyala/bytebufferpool"
 	"github.com/zeebo/bencode"
-	"golang.org/x/exp/maps"
 
 	"tyr/internal/bep40"
 	"tyr/internal/pkg/null"
@@ -204,7 +203,7 @@ func (t *Tracker) announce(d *Download, event string) (AnnounceResult, error) {
 
 	var m map[string]any
 	fmt.Println(bencode.DecodeBytes(res.Body(), &m))
-	spew.Dump(maps.Keys(m))
+	spew.Dump(lo.Keys(m))
 
 	//fmt.Println("t" res.String())
 

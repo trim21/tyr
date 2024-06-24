@@ -4,18 +4,23 @@ import (
 	_ "embed"
 	"encoding/json"
 	"net/http"
+	"os"
 	"reflect"
 	"strings"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	"github.com/rs/zerolog/log"
+	"github.com/samber/lo"
 	"github.com/swaggest/openapi-go"
 	"github.com/swaggest/swgui"
 	"github.com/swaggest/swgui/v5"
 	"github.com/ziflex/lecho/v3"
 
 	"tyr/internal/core"
+	"tyr/internal/pkg/global"
+	"tyr/internal/util"
 	"tyr/internal/web/internal/prof"
 	"tyr/internal/web/jsonrpc"
 )
@@ -52,6 +57,8 @@ func New(c *core.Client, token string, debug bool) http.Handler {
 	server := echo.New()
 	server.Logger = lecho.From(log.Logger)
 
+	server.Use(middleware.Recover())
+
 	if debug {
 		server.Debug = true
 		prof.Wrap(server)
@@ -68,7 +75,6 @@ func New(c *core.Client, token string, debug bool) http.Handler {
 					return c.JSON(401,
 						jsonrpc.Response{
 							JSONRPC: "2.0",
-							Result:  nil,
 							Error: &jsonrpc.Error{
 								Code:    jsonrpc.CodeParseError,
 								Message: err.Error(),
@@ -94,10 +100,20 @@ func New(c *core.Client, token string, debug bool) http.Handler {
 		Title:       apiSchema.Reflector().Spec.Info.Title,
 		SwaggerJSON: "/docs/openapi.json",
 		BasePath:    "/docs/",
-		SettingsUI:  jsonrpc.SwguiSettings(nil, "/json_rpc"),
+		SettingsUI:  jsonrpc.SwguiSettings(util.StrMap{"layout": "'BaseLayout'"}, "/json_rpc"),
 	})))
 
 	server.StaticFS("/", frontendFS)
+
+	if global.Dev {
+		lo.Must0(
+			os.WriteFile(
+				"./internal/web/openapi.json",
+				lo.Must(json.MarshalIndent(apiSchema.Reflector().Spec, "", "  ")),
+				os.ModePerm,
+			),
+		)
+	}
 
 	return server
 }

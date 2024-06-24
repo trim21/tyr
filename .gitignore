@@ -4,3 +4,4 @@ dist/
 tmp/
 *.exe
 *.pprof
+node_modules/

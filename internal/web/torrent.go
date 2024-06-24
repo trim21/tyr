@@ -14,25 +14,24 @@ import (
 
 	"tyr/internal/core"
 	"tyr/internal/meta"
-	"tyr/internal/pkg/unsafe"
 	"tyr/internal/web/jsonrpc"
 )
 
 type AddTorrentRequest struct {
-	TorrentFile string   `json:"torrent_file" format:"base64" required:"true" description:"base64 encoded torrent file content" validate:"required"`
+	TorrentFile []byte   `json:"torrent_file" required:"true" description:"base64 encoded torrent file content" validate:"required"`
 	DownloadDir string   `json:"download_dir" description:"download dir"`
 	Tags        []string `json:"tags"`
 	IsBaseDir   bool     `json:"is_base_dir" description:"if true, will not append torrent name to download_dir"`
 }
 
 type AddTorrentResponse struct {
-	InfoHash string `json:"info_hash" description:"torrent file hash"`
+	InfoHash string `json:"info_hash" description:"torrent file hash" required:"true"`
 }
 
 func AddTorrent(h *jsonrpc.Handler, c *core.Client) {
 	u := usecase.NewInteractor[*AddTorrentRequest, AddTorrentResponse](
 		func(ctx context.Context, req *AddTorrentRequest, res *AddTorrentResponse) error {
-			m, err := metainfo.Load(bytes.NewBuffer(unsafe.Bytes(req.TorrentFile)))
+			m, err := metainfo.Load(bytes.NewBuffer(req.TorrentFile))
 			if err != nil {
 				return CodeError(2, errgo.Wrap(err, "failed to parse torrent file"))
 			}
