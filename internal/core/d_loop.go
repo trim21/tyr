@@ -14,7 +14,6 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/docker/go-units"
 	"github.com/dustin/go-humanize"
-	"github.com/labstack/echo/v4"
 	"github.com/rs/zerolog/log"
 
 	"tyr/internal/meta"
@@ -217,7 +216,7 @@ func (d *Download) openFileWithCache(fileIndex int) (*fileOpenCache, error) {
 
 func (d *Download) handleRes(res proto.ChunkResponse) {
 	d.log.Trace().
-		Any("res", echo.Map{
+		Any("res", map[string]any{
 			"piece":  res.PieceIndex,
 			"offset": res.Begin,
 			"length": len(res.Data),

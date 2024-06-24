@@ -8,20 +8,17 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-playground/validator/v10"
-	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
-	"github.com/rs/zerolog/log"
 	"github.com/samber/lo"
 	"github.com/swaggest/openapi-go"
 	"github.com/swaggest/swgui"
-	"github.com/swaggest/swgui/v5"
-	"github.com/ziflex/lecho/v3"
+	v5 "github.com/swaggest/swgui/v5"
 
 	"tyr/internal/core"
 	"tyr/internal/pkg/global"
 	"tyr/internal/util"
-	"tyr/internal/web/internal/prof"
 	"tyr/internal/web/jsonrpc"
 )
 
@@ -32,12 +29,14 @@ type jsonRpcRequest struct {
 	ID json.RawMessage `json:"id"`
 }
 
+const HeaderAuthorization = "Authorization"
+
 func New(c *core.Client, token string, debug bool) http.Handler {
 	apiSchema := jsonrpc.OpenAPI{}
 	apiSchema.Reflector().SpecEns().Info.Title = "JSON-RPC"
 	apiSchema.Reflector().SpecEns().Info.Version = "0.0.1"
 	apiSchema.Reflector().SpecEns().Info.WithDescription(desc)
-	apiSchema.Reflector().SpecEns().SetAPIKeySecurity("api-key", echo.HeaderAuthorization, openapi.InHeader, "need set api header")
+	apiSchema.Reflector().SpecEns().SetAPIKeySecurity("api-key", HeaderAuthorization, openapi.InHeader, "need set api header")
 
 	v := validator.New()
 
@@ -54,56 +53,52 @@ func New(c *core.Client, token string, debug bool) http.Handler {
 		Validator: v,
 	}
 
-	server := echo.New()
-	server.Logger = lecho.From(log.Logger)
-
-	server.Use(middleware.Recover())
+	r := chi.NewMux()
+	r.Use(middleware.Recoverer)
+	r.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("."))
+		return
+	})
 
 	if debug {
-		server.Debug = true
-		prof.Wrap(server)
+		r.Mount("/debug", middleware.Profiler())
 	}
 
 	AddTorrent(h, c)
 
-	var auth echo.MiddlewareFunc = func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			if c.Request().Header.Get(echo.HeaderAuthorization) != token {
-				var r jsonRpcRequest
-				err := json.NewDecoder(c.Request().Body).Decode(&r)
-				if err != nil {
-					return c.JSON(401,
-						jsonrpc.Response{
-							JSONRPC: "2.0",
-							Error: &jsonrpc.Error{
-								Code:    jsonrpc.CodeParseError,
-								Message: err.Error(),
-							},
-						},
-					)
-				}
-				return c.JSON(401, jsonrpc.Response{
+	var auth = func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get(HeaderAuthorization) != token {
+				w.WriteHeader(401)
+				_ = json.NewEncoder(w).Encode(jsonrpc.Response{
 					JSONRPC: "2.0",
-					ID:      r.ID,
-					Error:   &jsonrpc.Error{Code: 401, Message: "invalid token"},
+					Error: &jsonrpc.Error{
+						Code:    jsonrpc.CodeInvalidRequest,
+						Message: "invalid token",
+					},
 				})
+
+				return
 			}
 
-			return next(c)
-		}
+			next.ServeHTTP(w, r)
+
+			return
+		})
 	}
 
-	server.POST("/json_rpc", echo.WrapHandler(h), auth)
-
-	server.GET("/docs/openapi.json", echo.WrapHandler(h.OpenAPI))
-	server.GET("/docs/*", echo.WrapHandler(v5.NewHandlerWithConfig(swgui.Config{
+	r.With(auth).Post("/json_rpc", h.ServeHTTP)
+	r.Get("/docs/openapi.json", h.OpenAPI.ServeHTTP)
+	r.Get("/docs/*", v5.NewHandlerWithConfig(swgui.Config{
 		Title:       apiSchema.Reflector().Spec.Info.Title,
 		SwaggerJSON: "/docs/openapi.json",
 		BasePath:    "/docs/",
 		SettingsUI:  jsonrpc.SwguiSettings(util.StrMap{"layout": "'BaseLayout'"}, "/json_rpc"),
-	})))
+	}).ServeHTTP)
 
-	server.StaticFS("/", frontendFS)
+	r.Handle("/*", http.FileServerFS(frontendFS))
 
 	if global.Dev {
 		lo.Must0(
@@ -115,5 +110,5 @@ func New(c *core.Client, token string, debug bool) http.Handler {
 		)
 	}
 
-	return server
+	return r
 }

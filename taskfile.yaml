@@ -24,8 +24,6 @@ tasks:
       - go.mod
       - go.sum
       - "**/*.go"
-      - "internal/web/static/**/*"
-      - "**/*.json"
     cmd: go build -tags assert -o dist/tmp/tmp.exe main.go
 
   dev:

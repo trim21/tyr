@@ -34,6 +34,7 @@ func New(cfg config.Config, sessionPath string) *Client {
 		IdleConnTimeout:    30 * time.Second,
 		DisableCompression: true,
 	}
+
 	hc := &http.Client{Transport: tr}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -65,7 +66,7 @@ func New(cfg config.Config, sessionPath string) *Client {
 		checkQueue:  make([]meta.Hash, 0, 3),
 		downloadMap: make(map[meta.Hash]*Download),
 		connChan:    make(chan incomingConn, 1),
-		http:        resty.NewWithClient(hc).SetHeader("User-Agent", global.UserAgent),
+		http:        resty.NewWithClient(hc).SetHeader("User-Agent", global.UserAgent).SetRedirectPolicy(resty.NoRedirectPolicy()),
 		mseDisabled: mseDisabled,
 		mseSelector: mseSelector,
 		sessionPath: sessionPath,
@@ -114,7 +115,7 @@ func (c *Client) AddTorrent(m *metainfo.MetaInfo, info meta.Info, downloadPath s
 	c.m.RLock()
 	if _, ok := c.downloadMap[info.Hash]; ok {
 		c.m.RUnlock()
-		return fmt.Errorf("torrent %x exists", info.Hash)
+		return fmt.Errorf("torrent %s exists", info.Hash)
 	}
 	c.m.RUnlock()
 

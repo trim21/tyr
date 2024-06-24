@@ -2,4 +2,4 @@
 
 package platform
 
-const platform_supported = 0
+const platformSupported = 1

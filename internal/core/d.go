@@ -128,9 +128,9 @@ func (c *Client) NewDownload(m *metainfo.MetaInfo, info meta.Info, basePath stri
 			},
 		},
 
+		// will use about 1mb per torrent, can be optimized later
 		pieceInfo: buildPieceInfos(info),
 		pieceData: make(map[uint32][]*proto.ChunkResponse, 20),
-		//pieceChunks: buildPieceChunk(info),
 
 		private: info.Private,
 
