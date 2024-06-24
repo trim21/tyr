@@ -50,6 +50,7 @@ func (d *Download) initCheck() error {
 	if cap(buf.B) <= int(d.info.PieceLength) {
 		buf.B = make([]byte, d.info.PieceLength)
 	}
+	buf.Reset()
 
 	var fileSeekCache = make(map[int]int64, len(d.info.Files))
 	var fileOpenCache = make(map[int]*os.File, len(d.info.Files))
@@ -59,9 +60,11 @@ func (d *Download) initCheck() error {
 		}
 	}()
 
+	// `len(buf.B)` is always 0, and `cap(buf.B)` is always PieceLength
+	// we use `size` to keep trace length of `buf.B`
+	var size int64
 	for _, index := range h {
-		buf.Reset()
-		//d.log.Trace().Msgf("should check piece %d %s", index, humanize.IBytes(uint64(d.ioIn.Status().CurRate)))
+		size = 0
 		piece := d.pieceInfo[index]
 		for _, chunk := range piece.fileChunks {
 			f, ok := fileOpenCache[chunk.fileIndex]
@@ -81,15 +84,16 @@ func (d *Download) initCheck() error {
 				}
 			}
 
-			_, err = d.ioDown.IO(io.ReadFull(f, buf.B[len(buf.B):len(buf.B)+int(chunk.length)]))
+			_, err = d.ioDown.IO(io.ReadFull(f, buf.B[size:size+chunk.length]))
 			if err != nil {
 				return errgo.Wrap(err, fmt.Sprintf("failed to read file %s", fp))
 			}
+			size += chunk.length
 
 			fileSeekCache[chunk.fileIndex] = chunk.offsetOfFile + chunk.length
 		}
 
-		sum := sha1.Sum(buf.B[:d.info.PieceLength])
+		sum := sha1.Sum(buf.B[:size])
 		if sum == d.info.Pieces[index] {
 			d.bm.Set(index)
 		}
@@ -159,17 +163,9 @@ type pieceInfoFileChunk struct {
 
 func pieceFileInfos(i uint32, info meta.Info) []pieceInfoFileChunk {
 	var pieceStart = int64(i) * info.PieceLength
-
 	var currentFileStart int64 = 0
 	var needToRead = info.PieceLength
 	var fileIndex = 0
-
-	if len(info.Files) == 1 {
-		return []pieceInfoFileChunk{{
-			offsetOfFile: pieceStart,
-			length:       min(info.TotalLength-info.PieceLength*int64(i), info.PieceLength),
-		}}
-	}
 
 	var result []pieceInfoFileChunk
 
@@ -177,15 +173,27 @@ func pieceFileInfos(i uint32, info meta.Info) []pieceInfoFileChunk {
 		f := info.Files[fileIndex]
 		currentFileEnd := currentFileStart + f.Length
 		currentReadStart := pieceStart + (info.PieceLength - needToRead)
+
 		if currentFileStart <= currentReadStart && currentReadStart <= currentFileEnd {
+
+			shouldRead := min(currentFileEnd-currentReadStart, needToRead)
+
 			result = append(result, pieceInfoFileChunk{
 				fileIndex:    fileIndex,
 				offsetOfFile: currentReadStart - currentFileStart,
-				length:       needToRead,
+				length:       shouldRead,
 			})
+
+			needToRead = needToRead - shouldRead
 		}
 
-		needToRead = needToRead - min(currentFileEnd-currentReadStart, needToRead)
+		currentFileStart += f.Length
+
+		fileIndex++
+
+		if fileIndex >= len(info.Files) {
+			break
+		}
 	}
 
 	if needToRead < 0 {
@@ -200,6 +208,10 @@ func tryAllocFile(index int, path string, size int64, doAlloc bool) (*existingFi
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return nil, err
+		}
+
+		if !doAlloc {
+			return nil, nil
 		}
 
 		f, err = os.Create(path)
@@ -220,8 +232,11 @@ func tryAllocFile(index int, path string, size int64, doAlloc bool) (*existingFi
 	if fs != 0 {
 		ef = &existingFile{index: index, size: fs}
 	}
-	if fs != size {
-		return nil, errgo.Wrap(fallocate.Fallocate(f, fs, size-fs), "failed to alloc file")
+
+	if doAlloc {
+		if fs != size {
+			return nil, errgo.Wrap(fallocate.Fallocate(f, fs, size-fs), "failed to alloc file")
+		}
 	}
 
 	return ef, nil

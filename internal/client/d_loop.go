@@ -7,12 +7,14 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"time"
 
 	"github.com/docker/go-units"
 	"github.com/dustin/go-humanize"
 	"github.com/labstack/echo/v4"
+	"github.com/rs/zerolog/log"
 
 	"tyr/internal/meta"
 	"tyr/internal/pkg/bufpool"
@@ -25,7 +27,7 @@ const defaultBlockSize = units.KiB * 16
 func (d *Download) Start() {
 	d.m.Lock()
 	if d.done.Load() {
-		d.state = Uploading
+		d.state = Seeding
 	} else {
 		d.state = Downloading
 	}
@@ -52,19 +54,27 @@ func (d *Download) Check() {
 func (d *Download) Init() {
 	d.log.Debug().Msg("initializing download")
 
+	d.m.Lock()
+	d.state = Checking
+	d.m.Unlock()
+
 	err := d.initCheck()
 	if err != nil {
 		d.setError(err)
 		d.log.Err(err).Msg("failed to initCheck torrent data")
 	}
 
+	d.ioDown.Reset()
+
 	d.log.Debug().Msgf("done size %s", humanize.IBytes(uint64(d.bm.Count())*uint64(d.info.PieceLength)))
 
+	d.m.Lock()
 	if d.bm.Count() == d.info.NumPieces {
-		d.state = Uploading
+		d.state = Seeding
 	} else {
 		d.state = Downloading
 	}
+	d.m.Unlock()
 
 	go d.startBackground()
 }
@@ -72,7 +82,7 @@ func (d *Download) Init() {
 func (d *Download) startBackground() {
 	d.log.Trace().Msg("start goroutine")
 
-	go d.backgroundPieceHandle()
+	go d.backgroundReqHandle()
 	go d.backgroundResHandler()
 
 	go func() {
@@ -162,6 +172,47 @@ func (d *Download) backgroundResHandler() {
 	}
 }
 
+func (d *Download) giveBackFileCache(f *fileOpenCache) {
+	d.fileOpenMutex.L.Lock()
+	defer d.fileOpenMutex.L.Unlock()
+
+	f.borrowed = false
+	d.fileOpenCache[f.index] = f
+
+	d.fileOpenMutex.Broadcast()
+}
+
+func (d *Download) openFileWithCache(fileIndex int) (*fileOpenCache, error) {
+	d.fileOpenMutex.L.Lock()
+	defer d.fileOpenMutex.L.Unlock()
+
+	f, ok := d.fileOpenCache[fileIndex]
+	if !ok {
+		f, err := os.OpenFile(filepath.Join(d.basePath, d.info.Files[fileIndex].Path), os.O_RDWR|os.O_CREATE, os.ModePerm)
+		if err != nil {
+			return nil, err
+		}
+
+		fc := &fileOpenCache{
+			file:     f,
+			index:    fileIndex,
+			borrowed: true,
+		}
+
+		d.fileOpenCache[fileIndex] = fc
+
+		return fc, nil
+	}
+
+	for f.borrowed {
+		d.fileOpenMutex.Wait()
+	}
+
+	f.borrowed = true
+
+	return f, nil
+}
+
 func (d *Download) handleRes(res proto.ChunkResponse) {
 	d.log.Trace().
 		Any("res", echo.Map{
@@ -193,84 +244,96 @@ func (d *Download) handleRes(res proto.ChunkResponse) {
 	}
 
 	if filled {
-		piece := bufpool.Get()
-		for _, chunk := range chunks {
-			piece.Write(chunk.Data)
-		}
-
-		h := sha1.Sum(piece.B)
-
-		if h != d.info.Pieces[res.PieceIndex] {
-			d.corrupted.Add(d.info.PieceLength)
-			fmt.Println("data mismatch", res.PieceIndex)
-			bufpool.Put(piece)
-			d.pieceData[res.PieceIndex] = nil
-			return
-		}
-
-		tasks.Submit(func() {
-			defer bufpool.Put(piece)
-			pieces := d.pieceInfo[res.PieceIndex]
-			var offset int64 = 0
-			for _, chunk := range pieces.fileChunks {
-				f, err := os.OpenFile(filepath.Join(d.basePath, d.info.Files[chunk.fileIndex].Path), os.O_RDWR|os.O_CREATE, os.ModePerm)
-				if err != nil {
-					d.setError(err)
-					return
-				}
-				defer f.Close()
-
-				_, err = f.Seek(chunk.offsetOfFile, io.SeekStart)
-				if err != nil {
-					d.setError(err)
-					return
-				}
-
-				_, err = f.Write(piece.B[offset:chunk.length])
-				if err != nil {
-					d.setError(err)
-					return
-				}
-
-				offset += chunk.length
-			}
-
-			d.pdMutex.Lock()
-			delete(d.pieceData, res.PieceIndex)
-			d.pdMutex.Unlock()
-
-			d.bm.Set(res.PieceIndex)
-
-			d.log.Trace().Msgf("piece %d done", res.PieceIndex)
-			d.have(res.PieceIndex)
-
-			if d.bm.Count() == d.info.NumPieces {
-				d.m.Lock()
-				d.state = Uploading
-				d.m.Unlock()
-			}
-		})
+		go d.writePieceToDisk(res.PieceIndex, chunks)
+		delete(d.pieceData, res.PieceIndex)
+		return
 	}
 
 	d.pieceData[res.PieceIndex] = chunks
 }
 
-func (d *Download) backgroundPieceHandle() {
+func (d *Download) writePieceToDisk(pieceIndex uint32, chunks []*proto.ChunkResponse) error {
+	piece := bufpool.Get()
+
+	for _, chunk := range chunks {
+		piece.Write(chunk.Data)
+	}
+
+	h := sha1.Sum(piece.B)
+	if h != d.info.Pieces[pieceIndex] {
+		d.corrupted.Add(d.info.PieceLength)
+		fmt.Println("data mismatch", pieceIndex)
+		bufpool.Put(piece)
+		return nil
+	}
+
+	tasks.Submit(func() {
+		defer bufpool.Put(piece)
+		pieces := d.pieceInfo[pieceIndex]
+		var offset int64 = 0
+
+		for _, chunk := range pieces.fileChunks {
+			f, err := d.openFileWithCache(chunk.fileIndex)
+			if err != nil {
+				d.setError(err)
+				return
+			}
+			defer d.giveBackFileCache(f)
+
+			_, err = f.file.Seek(chunk.offsetOfFile, io.SeekStart)
+			if err != nil {
+				d.setError(err)
+				return
+			}
+
+			_, err = f.file.Write(piece.B[offset : offset+chunk.length])
+			if err != nil {
+				d.setError(err)
+				return
+			}
+
+			offset += chunk.length
+		}
+
+		d.pdMutex.Lock()
+		delete(d.pieceData, pieceIndex)
+		d.pdMutex.Unlock()
+
+		d.bm.Set(pieceIndex)
+
+		d.log.Trace().Msgf("piece %d done", pieceIndex)
+		d.have(pieceIndex)
+
+		if d.bm.Count() == d.info.NumPieces {
+			d.m.Lock()
+			d.state = Seeding
+			d.ioDown.Reset()
+			d.m.Unlock()
+		}
+	})
+
+	return nil
+}
+
+func (d *Download) backgroundReqHandle() {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-d.ctx.Done():
 			return
-		default:
+		case <-ticker.C:
 			if d.ctx.Err() != nil {
 				return
 			}
 			d.m.Lock()
-			if d.state == Uploading {
+			if d.state == Seeding {
 				d.cond.Wait()
 			}
 			d.m.Unlock()
 
-			//d.log.Debug().Msg("backgroundPieceHandle")
+			//d.log.Debug().Msg("backgroundReqHandle")
 
 			//weight := avaPool.Get()
 
@@ -278,8 +341,6 @@ func (d *Download) backgroundPieceHandle() {
 			//}
 			//var h heap.Interface[pair.Pair[uint32, uint32]]
 			//weight := make([]pair.Pair[uint32, uint32], 0, int(d.numPieces))
-
-			d.log.Trace().Msgf("connections %d", d.conn.Size())
 
 			if d.seq.Load() {
 				d.scheduleSeq()
@@ -325,12 +386,13 @@ type downloadReq struct {
 }
 
 func buildPieceChunk(info meta.Info) [][]proto.ChunkRequest {
+	log.Debug().Stringer("info_hash", info.Hash).Msg("build piece chunk")
 	var result = make([][]proto.ChunkRequest, 0, (info.PieceLength+defaultBlockSize-1)/defaultBlockSize*int64(info.NumPieces))
 
 	var numPerPiece = (info.PieceLength + defaultBlockSize - 1) / defaultBlockSize
 
 	for i := uint32(0); i < info.NumPieces; i++ {
-		var rr = make([]proto.ChunkRequest, 0, numPerPiece)
+		var rr = make([]proto.ChunkRequest, 0, 1)
 
 		pieceStart := int64(i) * info.PieceLength
 
@@ -358,18 +420,83 @@ func buildPieceChunk(info meta.Info) [][]proto.ChunkRequest {
 		result = append(result, rr)
 	}
 
+	if len(result) == 0 {
+		panic("unexpected result")
+	}
+
+	fmt.Println(humanize.IBytes(uint64(nestedSizeOf(reflect.ValueOf(result)))))
+
 	return result
 }
 
+func nestedSizeOf(rv reflect.Value) uintptr {
+	var sum uintptr = 0
+	switch rv.Type().Kind() {
+	case reflect.Chan, reflect.Array, reflect.Bool, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Int,
+		reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uint, reflect.Uintptr,
+		reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128:
+		sum += rv.Type().Size()
+	case reflect.Struct:
+		//sum += rv.Type().Size()
+		for i := 0; i < rv.NumField(); i++ {
+			sum += nestedSizeOf(rv.Field(i))
+		}
+	case reflect.Slice:
+		for i := 0; i < rv.Len(); i++ {
+			sum += nestedSizeOf(rv.Index(i))
+		}
+	case reflect.Ptr:
+		sum += nestedSizeOf(rv.Elem())
+	case reflect.String:
+		sum += uintptr(rv.Len())
+	case reflect.Interface:
+		sum += nestedSizeOf(rv.Elem())
+	case reflect.Map:
+		for _, k := range rv.MapKeys() {
+			sum += nestedSizeOf(k)
+			sum += nestedSizeOf(rv.MapIndex(k))
+		}
+	}
+
+	return sum
+}
+
+func pieceChunks(info meta.Info, index uint32) []proto.ChunkRequest {
+	var numPerPiece = (info.PieceLength + defaultBlockSize - 1) / defaultBlockSize
+	var rr = make([]proto.ChunkRequest, 0, numPerPiece)
+
+	pieceStart := int64(index) * info.PieceLength
+
+	pieceLen := min(info.PieceLength, info.TotalLength-pieceStart)
+
+	for n := int64(0); n < numPerPiece; n++ {
+		begin := defaultBlockSize * int64(n)
+		length := uint32(min(pieceLen-begin, defaultBlockSize))
+
+		if length <= 0 {
+			break
+		}
+
+		rr = append(rr, proto.ChunkRequest{
+			PieceIndex: index,
+			Begin:      uint32(begin),
+			Length:     length,
+		})
+	}
+
+	return rr
+}
+
 func (d *Download) scheduleSeq() {
-	var found = 0
+	var found int64 = 0
+
 	for pi, chunks := range d.pieceChunks {
 		index := uint32(pi)
-
 		if d.bm.Get(index) {
 			continue
 		}
 
+		send := false
 		d.conn.Range(func(addr netip.AddrPort, p *Peer) bool {
 			if !p.Bitmap.Get(index) {
 				return true
@@ -379,12 +506,15 @@ func (d *Download) scheduleSeq() {
 				p.Request(chunk)
 			}
 
-			found++
-
+			send = true
 			return false
 		})
 
-		if found > 20 {
+		if send {
+			found++
+		}
+
+		if found*d.info.PieceLength >= units.GiB {
 			break
 		}
 	}

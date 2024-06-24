@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/anacrolix/generics/heap"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/go-resty/resty/v2"
@@ -21,7 +22,9 @@ import (
 	"github.com/zeebo/bencode"
 	"golang.org/x/exp/maps"
 
+	"tyr/internal/bep40"
 	"tyr/internal/pkg/null"
+	"tyr/internal/pkg/unsafe"
 )
 
 const EventStarted = "started"
@@ -51,8 +54,13 @@ func (d *Download) asyncAnnounce(event string) {
 		}
 		if len(r.Peers) != 0 {
 			d.peersMutex.Lock()
-			d.peers = append(d.peers, r.Peers...)
-			d.peers = lo.Uniq(d.peers)
+			for _, peer := range r.Peers {
+				// TODO: bep40, maybe
+				heap.Push[peerWithPriority](d.peers, peerWithPriority{
+					peer:     peer,
+					priority: bep40.SimplePriority(d.c.randKey, unsafe.Bytes(peer.String())),
+				})
+			}
 			d.peersMutex.Unlock()
 		}
 		return
@@ -224,17 +232,22 @@ func (t *Tracker) announce(d *Download, event string) (AnnounceResult, error) {
 		} else {
 			// compact response
 			var b = bytebufferpool.Get()
-			b.Reset()
+			defer bytebufferpool.Put(b)
 			err = bencode.DecodeBytes(r.Peers.Value, &b.B)
-			if err == nil {
-				result.Peers = make([]netip.AddrPort, 0, len(b.B)/6)
-				for i := 0; i < len(b.B); i += 6 {
-					addr := netip.AddrFrom4([4]byte(b.B[i : i+4]))
-					port := binary.BigEndian.Uint16(b.B[i+4:])
-					result.Peers = append(result.Peers, netip.AddrPortFrom(addr, port))
-				}
+			if err != nil {
+				return result, errgo.Wrap(err, "failed to parse binary format 'peers'")
 			}
-			bytebufferpool.Put(b)
+
+			if b.Len()%6 != 0 {
+				return result, fmt.Errorf("invalid binary peers6 length %d", b.Len())
+			}
+
+			result.Peers = make([]netip.AddrPort, 0, len(b.B)/6)
+			for i := 0; i < len(b.B); i += 6 {
+				addr := netip.AddrFrom4([4]byte(b.B[i : i+4]))
+				port := binary.BigEndian.Uint16(b.B[i+4:])
+				result.Peers = append(result.Peers, netip.AddrPortFrom(addr, port))
+			}
 		}
 
 		slices.SortFunc(result.Peers, func(a, b netip.AddrPort) int {
@@ -249,15 +262,22 @@ func (t *Tracker) announce(d *Download, event string) (AnnounceResult, error) {
 		} else {
 			// compact response
 			var b = bytebufferpool.Get()
-			b.Reset()
-			if bencode.DecodeBytes(r.Peers.Value, &b.B) == nil {
-				for i := 0; i < b.Len(); i += 18 {
-					addr := netip.AddrFrom16([16]byte(b.B[i : i+16]))
-					port := binary.BigEndian.Uint16(b.B[i+16:])
-					result.Peers = append(result.Peers, netip.AddrPortFrom(addr, port))
-				}
+			defer bytebufferpool.Put(b)
+
+			err = bencode.DecodeBytes(r.Peers6.Value, &b.B)
+			if err != nil {
+				return result, errgo.Wrap(err, "failed to parse binary format 'peers6'")
 			}
-			bytebufferpool.Put(b)
+
+			if b.Len()%18 != 0 {
+				return result, fmt.Errorf("invalid binary peers6 length %d", b.Len())
+			}
+
+			for i := 0; i < b.Len(); i += 18 {
+				addr := netip.AddrFrom16([16]byte(b.B[i : i+16]))
+				port := binary.BigEndian.Uint16(b.B[i+16:])
+				result.Peers = append(result.Peers, netip.AddrPortFrom(addr, port))
+			}
 		}
 	}
 
@@ -301,3 +321,33 @@ func (d *Download) ScrapeUrl() string {
 	//}
 	//}
 }
+
+type peerWithPriority struct {
+	peer     netip.AddrPort
+	priority uint32
+}
+
+type peersHeap []peerWithPriority
+
+func (h peersHeap) Len() int {
+	return len(h)
+}
+
+func (h peersHeap) Less(i, j int) bool {
+	return h[i].priority < h[j].priority
+}
+
+func (h *peersHeap) Swap(i, j int) {
+	(*h)[i], (*h)[j] = (*h)[j], (*h)[i]
+}
+
+func (h *peersHeap) Push(v peerWithPriority) {
+	*h = append(*h, v)
+}
+
+func (h *peersHeap) Pop() (v peerWithPriority) {
+	*h, v = (*h)[:h.Len()-1], (*h)[h.Len()-1]
+	return v
+}
+
+var _ heap.Interface[peerWithPriority] = (*peersHeap)(nil)

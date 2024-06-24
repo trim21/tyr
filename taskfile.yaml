@@ -47,6 +47,8 @@ tasks:
   #      - dist/server.exe --web 127.0.0.1:8002 --config-file ./config.toml
   lint: golangci-lint run
 
+  gen: go generate ./...
+
   pprof:
     cmds:
       - go tool pprof -http=:8001 http://127.0.0.1:8002
@@ -54,6 +56,10 @@ tasks:
   pprof:block:
     cmds:
       - go tool pprof -http=:8001 http://127.0.0.1:8002/debug/pprof/block
+
+  pprof:heap:
+    cmds:
+      - go tool pprof -http=:8001 http://127.0.0.1:8002/debug/pprof/heap
 
   trace:
     cmds:

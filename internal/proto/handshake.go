@@ -2,6 +2,7 @@ package proto
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -11,12 +12,23 @@ import (
 	"tyr/internal/meta"
 )
 
+func genReversedFlag(index int, value byte) uint64 {
+	var b [8]byte
+	b[index] = value
+	return binary.BigEndian.Uint64(b[:])
+}
+
 var handshakePstrV1 = []byte("\x13BitTorrent protocol")
 
-var fastExtensionEnabled byte = 1 << 2
-var exchangeExtensionEnabled byte = 0x10
+// https://www.bittorrent.org/beps/bep_0006.html
+// reserved_byte[7] & 0x04
+var fastExtensionEnabled uint64 = genReversedFlag(7, 0x04)
 
-var HandshakeReserved = []byte{0, 0, 0, 0, 0, exchangeExtensionEnabled, 0, 0}
+// https://www.bittorrent.org/beps/bep_0010.html
+// reserved_byte[5] & 0x10
+var exchangeExtensionEnabled uint64 = genReversedFlag(5, 0x10)
+
+var handshakeBytes = binary.BigEndian.AppendUint64(nil, exchangeExtensionEnabled|fastExtensionEnabled)
 
 // SendHandshake = <pStrlen><pStr><reserved><info_hash><peer_id>
 // - pStrlen = length of pStr (1 byte)
@@ -32,7 +44,7 @@ func SendHandshake(conn io.Writer, infoHash, peerID [20]byte) error {
 		return err
 	}
 
-	_, err = conn.Write(HandshakeReserved)
+	_, err = conn.Write(handshakeBytes)
 	if err != nil {
 		return err
 	}
@@ -79,13 +91,15 @@ func ReadHandshake(conn io.Reader) (Handshake, error) {
 
 	assert.Equal(8, n)
 
+	reversed := binary.BigEndian.Uint64(b)
+
 	var h = Handshake{}
 
-	if b[8]&fastExtensionEnabled != 0 {
+	if reversed&fastExtensionEnabled != 0 {
 		h.FastExtension = true
 	}
 
-	if b[5]&exchangeExtensionEnabled != 0 {
+	if reversed&exchangeExtensionEnabled != 0 {
 		h.ExchangeExtensions = true
 	}
 

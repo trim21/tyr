@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net/netip"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -31,7 +33,7 @@ type State uint8
 //go:generate stringer -type=State
 const Downloading State = 0
 const Stopped State = 1
-const Uploading State = 2
+const Seeding State = 2
 const Checking State = 3
 const Moving State = 3
 const Error State = 4
@@ -61,7 +63,7 @@ type Download struct {
 	tags              []string
 	pieceInfo         []pieceFileChunks
 	trackers          []TrackerTier
-	peers             []netip.AddrPort
+	peers             *peersHeap
 	info              meta.Info
 	AddAt             int64
 	CompletedAt       atomic.Int64
@@ -83,6 +85,15 @@ type Download struct {
 	peerID            PeerID
 	state             State
 	private           bool
+
+	fileOpenMutex *sync.Cond
+	fileOpenCache map[int]*fileOpenCache
+}
+
+type fileOpenCache struct {
+	borrowed bool
+	index    int
+	file     *os.File
 }
 
 func (c *Client) NewDownload(m *metainfo.MetaInfo, info meta.Info, basePath string, tags []string) *Download {
@@ -112,18 +123,26 @@ func (c *Client) NewDownload(m *metainfo.MetaInfo, info meta.Info, basePath stri
 		conn:              xsync.NewMapOf[netip.AddrPort, *Peer](),
 		connectionHistory: xsync.NewMapOf[netip.AddrPort, connHistory](),
 
-		peers: []netip.AddrPort{
-			netip.MustParseAddrPort("192.168.1.3:50025"),
+		peers: &peersHeap{
+			{
+				peer:     netip.MustParseAddrPort("192.168.1.3:50025"),
+				priority: math.MaxUint32,
+			},
 		},
 
-		pieceInfo: buildPieceInfos(info),
-
+		pieceInfo:   buildPieceInfos(info),
 		pieceData:   make(map[uint32][]*proto.ChunkResponse, 20),
 		pieceChunks: buildPieceChunk(info),
+
+		private: info.Private,
 
 		bm: bm.New(info.NumPieces),
 
 		downloadDir: basePath,
+
+		fileOpenMutex: sync.NewCond(&sync.Mutex{}),
+
+		fileOpenCache: make(map[int]*fileOpenCache),
 	}
 
 	d.seq.Store(true)
@@ -132,6 +151,8 @@ func (c *Client) NewDownload(m *metainfo.MetaInfo, info meta.Info, basePath stri
 	if !global.Dev {
 		d.setAnnounceList(m)
 	}
+
+	d.log.Info().Msg("download created")
 
 	//spew.Dump(d.pieceChunks[0])
 	//spew.Dump(d.pieceChunks[len(d.pieceChunks)-1])
@@ -150,10 +171,11 @@ func (d *Download) Display() string {
 	d.m.RLock()
 	defer d.m.RUnlock()
 
-	_, _ = fmt.Fprintf(buf, "%s | %.20s | %.2f%% | %s | %s | %d ↓",
-		d.state,
-		d.info.Name,
+	_, _ = fmt.Fprintf(buf, "%-12s | %s | %5.1f%% | %8s | %9s (%9s) ↓ | %d ",
+		d.state.String(),
+		d.info.Hash,
 		float64(int64(d.bm.Count())*d.info.PieceLength*10000/d.info.TotalLength)/100,
+		humanize.IBytes(uint64(d.info.TotalLength)),
 		humanize.IBytes(uint64(d.downloaded.Load())),
 		d.ioDown.Status().RateString(), d.conn.Size(),
 	)

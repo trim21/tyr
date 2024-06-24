@@ -41,3 +41,18 @@ func Base64Str(length int) string {
 		}
 	}
 }
+
+// Bytes generate a cryptographically secure random bytes.
+// Will panic if it can't read from 'crypto/rand'.
+func Bytes(length int) []byte {
+	reader := p.Get()
+	defer p.Put(reader)
+
+	r := make([]byte, length) //nolint:gomnd
+	_, err := io.ReadFull(reader, r)
+	if err != nil {
+		panic(err)
+	}
+
+	return r
+}

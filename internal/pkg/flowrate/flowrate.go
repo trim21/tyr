@@ -228,6 +228,15 @@ func (m *Monitor) update(n int) (now time.Duration) {
 	return
 }
 
+func (m *Monitor) Reset() {
+	m.mu.Lock()
+	m.start = clock()
+	m.bytes = 0
+	m.sBytes = 0
+	m.samples = 0
+	m.mu.Unlock()
+}
+
 // reset clears the current sample state in preparation for the next sample.
 func (m *Monitor) reset(sampleTime time.Duration) {
 	m.bytes += m.sBytes

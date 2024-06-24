@@ -139,11 +139,13 @@ func (p *Peer) Response(res proto.ChunkResponse) {
 
 func (p *Peer) Request(req proto.ChunkRequest) {
 	if p.requests.Size() > int(p.QueueLimit.Load()) {
+		p.log.Trace().Msg("too many pending requests")
 		return
 	}
 
 	_, exist := p.requests.LoadOrStore(req, empty.Empty{})
 	if exist {
+		p.log.Trace().Msg("requests already sent")
 		return
 	}
 
@@ -159,6 +161,10 @@ func (p *Peer) Request(req proto.ChunkRequest) {
 }
 
 func (p *Peer) Have(index uint32) {
+	if p.Bitmap.Get(index) {
+		return
+	}
+
 	err := p.sendEvent(Event{
 		Index: index,
 		Event: proto.Have,
@@ -223,13 +229,6 @@ func (p *Peer) start(skipHandshake bool) {
 	if err != nil {
 		p.log.Trace().Err(err).Msg("failed to send bitfield")
 		return
-	}
-
-	if p.Bitmap.WithAndNot(p.d.bm).Count() != 0 {
-		err = p.sendEvent(Event{Event: proto.Interested})
-		if err != nil {
-			return
-		}
 	}
 
 	go p.keepAlive()
@@ -316,6 +315,18 @@ func (p *Peer) start(skipHandshake bool) {
 		// currently ignored
 		case proto.BitCometExtension:
 		}
+
+		go func() {
+			switch event.Event {
+			case proto.Have, proto.HaveAll, proto.Bitfield:
+				if p.Bitmap.WithAndNot(p.d.bm).Count() != 0 {
+					err = p.sendEvent(Event{Event: proto.Interested})
+					if err != nil {
+						return
+					}
+				}
+			}
+		}()
 	}
 }
 
@@ -376,11 +387,9 @@ func (p *Peer) resIsValid(res proto.ChunkResponse) bool {
 		Length:     uint32(len(res.Data)),
 	}
 
-	if _, ok := p.requests.Load(r); !ok {
+	if _, ok := p.requests.LoadAndDelete(r); !ok {
 		return false
 	}
-
-	p.requests.Delete(r)
 
 	return true
 }

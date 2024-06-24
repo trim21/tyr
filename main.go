@@ -13,8 +13,6 @@ import (
 	"syscall"
 
 	"github.com/anacrolix/torrent/metainfo"
-	"github.com/anacrolix/torrent/types/infohash"
-	"github.com/negrel/assert"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/samber/lo"
@@ -118,12 +116,15 @@ func main() {
 		errExit("failed to listen on p2p port", e)
 	}
 
-	m := lo.Must(metainfo.LoadFromFile(`C:\Users\Trim21\Downloads\ubuntu-24.04-desktop-amd64.iso.torrent.patched`))
-	assert.Equal(
-		infohash.FromHexString("2aa4f5a7e209e54b32803d43670971c4c8caaa05"),
-		m.HashInfoBytes(),
-	)
-	lo.Must0(app.AddTorrent(m, lo.Must(meta.FromTorrent(*m)), "C:\\Users\\Trim21\\Downloads\\ubuntu", strings.Split("a q e", " ")))
+	{
+		m := lo.Must(metainfo.LoadFromFile(`C:\Users\Trim21\Downloads\ubuntu-24.04-desktop-amd64.iso.torrent.patched`))
+		lo.Must0(app.AddTorrent(m, lo.Must(meta.FromTorrent(*m)), "D:\\Downloads\\ubuntu", strings.Split("a q e", " ")))
+	}
+
+	{
+		m := lo.Must(metainfo.LoadFromFile(`C:\Users\Trim21\Downloads\qwer.torrent`))
+		lo.Must0(app.AddTorrent(m, lo.Must(meta.FromTorrent(*m)), "D:\\Downloads\\qwer", strings.Split("a q e", " ")))
+	}
 
 	var done = make(chan empty.Empty)
 

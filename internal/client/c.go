@@ -25,6 +25,7 @@ import (
 	"tyr/internal/pkg/global"
 	"tyr/internal/pkg/global/tasks"
 	"tyr/internal/pkg/gslice"
+	"tyr/internal/pkg/random"
 )
 
 func New(cfg config.Config, sessionPath string) *Client {
@@ -52,6 +53,8 @@ func New(cfg config.Config, sessionPath string) *Client {
 		panic(fmt.Sprintf("invalid `application.crypto` config %q, only 'prefer'(default) 'prefer-not', 'disable' or 'force' are allowed", cfg.App.Crypto))
 	}
 
+	//ips, err := util.GetLocalIpaddress(nil)
+
 	return &Client{
 		Config: cfg,
 		ctx:    ctx,
@@ -67,6 +70,7 @@ func New(cfg config.Config, sessionPath string) *Client {
 		mseSelector: mseSelector,
 		sessionPath: sessionPath,
 		fh:          make(map[string]*os.File),
+		randKey:     random.Bytes(32),
 	}
 }
 
@@ -96,6 +100,12 @@ type Client struct {
 	checkQueueLock  sync.Mutex
 	fLock           sync.Mutex
 	mseDisabled     bool
+
+	// a random key for peer priority
+	randKey []byte
+
+	//ip4 atomic.Pointer[netip.Addr]
+	//ip6 atomic.Pointer[netip.Addr]
 }
 
 func (c *Client) AddTorrent(m *metainfo.MetaInfo, info meta.Info, downloadPath string, tags []string) error {

@@ -39,7 +39,7 @@ func (b *Bitmap) Clear() {
 
 func (b *Bitmap) Fill() {
 	b.m.Lock()
-	b.bm.AddRange(0, uint64(b.size-1))
+	b.bm.AddRange(0, uint64(b.size))
 	b.m.Unlock()
 }
 

@@ -10,15 +10,15 @@ func _() {
 	var x [1]struct{}
 	_ = x[Downloading-0]
 	_ = x[Stopped-1]
-	_ = x[Uploading-2]
+	_ = x[Seeding-2]
 	_ = x[Checking-3]
 	_ = x[Moving-3]
 	_ = x[Error-4]
 }
 
-const _State_name = "DownloadingStoppedUploadingCheckingError"
+const _State_name = "DownloadingStoppedSeedingCheckingError"
 
-var _State_index = [...]uint8{0, 11, 18, 27, 35, 40}
+var _State_index = [...]uint8{0, 11, 18, 25, 33, 38}
 
 func (i State) String() string {
 	if i >= State(len(_State_index)-1) {

@@ -5,8 +5,10 @@ import (
 	"errors"
 	"net"
 	"net/netip"
-	"slices"
 	"time"
+
+	"github.com/anacrolix/generics/heap"
+	"github.com/samber/lo"
 
 	"tyr/internal/mse"
 	"tyr/internal/pkg/global"
@@ -24,10 +26,13 @@ func (d *Download) AddConn(addr netip.AddrPort, conn net.Conn, h proto.Handshake
 
 func (d *Download) connectToPeers() {
 	d.peersMutex.RLock()
-	peers := slices.Clone(d.peers)
+	peers := lo.ToPtr(*d.peers)
 	d.peersMutex.RUnlock()
 
-	for _, addr := range peers {
+	for i := 0; i < peers.Len(); i++ {
+		pp := heap.Pop[peerWithPriority](peers)
+		addr := pp.peer
+
 		if item := d.c.ch.Get(addr); item != nil {
 			ch := item.Value()
 			if ch.timeout {
