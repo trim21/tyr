@@ -171,13 +171,22 @@ func (d *Download) Display() string {
 	d.m.RLock()
 	defer d.m.RUnlock()
 
-	_, _ = fmt.Fprintf(buf, "%-12s | %s | %5.1f%% | %8s | %9s (%9s) ↓ | %d ",
+	rate := d.ioDown.Status()
+
+	left := d.info.TotalLength - int64(d.bm.Count())*d.info.PieceLength
+
+	var eta time.Duration
+	if rate.CurRate != 0 {
+		eta = time.Second * time.Duration(left/(rate.CurRate))
+	}
+
+	_, _ = fmt.Fprintf(buf, "%-12s | %s | %5.1f%% | %8s | %9s (%9s) ↓ | %6s | %d ",
 		d.state.String(),
 		d.info.Hash,
 		float64(int64(d.bm.Count())*d.info.PieceLength*10000/d.info.TotalLength)/100,
 		humanize.IBytes(uint64(d.info.TotalLength)),
 		humanize.IBytes(uint64(d.downloaded.Load())),
-		d.ioDown.Status().RateString(), d.conn.Size(),
+		rate.RateString(), eta, d.conn.Size(),
 	)
 
 	for _, tier := range d.trackers {
