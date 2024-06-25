@@ -10,7 +10,7 @@ importers:
     devDependencies:
       '@types/node':
         specifier: ^20.14.8
-        version: 20.14.8
+        version: 20.14.9
       openapi-typescript:
         specifier: ^7.0.0
         version: 7.0.0(typescript@5.5.2)
@@ -42,8 +42,8 @@ packages:
     resolution: {integrity: sha512-z06h+svyqbUcdAaePq8LPSwTPlm6Ig7j2VlL8skPBYnJvyaQ2IN7x/JkOvRL4ta+wcOCBdAex5JWnZbKaNktJg==}
     engines: {node: '>=14.19.0', npm: '>=7.0.0'}
 
-  '@types/node@20.14.8':
-    resolution: {integrity: sha512-DO+2/jZinXfROG7j7WKFn/3C6nFwxy2lLpgLjEXJz+0XKphZlTLJ14mo8Vfg8X5BWN6XjyESXq+LcYdT7tR3bA==}
+  '@types/node@20.14.9':
+    resolution: {integrity: sha512-06OCtnTXtWOZBJlRApleWndH4JsRVs1pDCc8dLSQp+7PpUpX3ePdHyeNSFTeSe7FtKyQkrlPvHwJOW3SLd8Oyg==}
 
   agent-base@7.1.1:
     resolution: {integrity: sha512-H0TSyFNDMomMNJQBn8wFV5YC/2eJ+VXECwOadZJT554xP6cODZHPX3H9QMQECxvrgiSOP1pHjy1sMWQVYJOUOA==}
@@ -246,7 +246,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@types/node@20.14.8':
+  '@types/node@20.14.9':
     dependencies:
       undici-types: 5.26.5
 
