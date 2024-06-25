@@ -30,7 +30,7 @@ require (
 	github.com/stretchr/testify v1.9.0
 	github.com/swaggest/assertjson v1.9.0
 	github.com/swaggest/jsonrpc v0.2.0
-	github.com/swaggest/openapi-go v0.2.52
+	github.com/swaggest/openapi-go v0.2.53
 	github.com/swaggest/swgui v1.8.1
 	github.com/swaggest/usecase v1.3.1
 	github.com/trim21/errgo v0.0.2
@@ -80,7 +80,7 @@ require (
 	github.com/spf13/afero v1.11.0 // indirect
 	github.com/spf13/cast v1.6.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
-	github.com/swaggest/jsonschema-go v0.3.71 // indirect
+	github.com/swaggest/jsonschema-go v0.3.72 // indirect
 	github.com/swaggest/refl v1.3.0 // indirect
 	github.com/yudai/gojsondiff v1.0.0 // indirect
 	github.com/yudai/golcs v0.0.0-20170316035057-ecda9a501e82 // indirect
