@@ -30,7 +30,7 @@ require (
 	github.com/stretchr/testify v1.9.0
 	github.com/swaggest/assertjson v1.9.0
 	github.com/swaggest/jsonrpc v0.2.0
-	github.com/swaggest/openapi-go v0.2.51
+	github.com/swaggest/openapi-go v0.2.52
 	github.com/swaggest/swgui v1.8.1
 	github.com/swaggest/usecase v1.3.1
 	github.com/trim21/errgo v0.0.2
