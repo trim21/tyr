@@ -1,14 +1,9 @@
 {
-  "name": "ve",
+  "name": "tyr",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
   "scripts": {
     "generate": "openapi-typescript internal/web/openapi.json --output internal/web/frontend/types.d.ts --export-type"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "packageManager": "pnpm@9.4.0",
   "devDependencies": {
     "@types/node": "^20.14.8",

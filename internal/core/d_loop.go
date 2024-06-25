@@ -3,7 +3,6 @@ package core
 import (
 	"crypto/sha1"
 	"fmt"
-	"io"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -281,13 +280,7 @@ func (d *Download) writePieceToDisk(pieceIndex uint32, chunks []*proto.ChunkResp
 			}
 			defer d.giveBackFileCache(f)
 
-			_, err = f.file.Seek(chunk.offsetOfFile, io.SeekStart)
-			if err != nil {
-				d.setError(err)
-				return
-			}
-
-			_, err = f.file.Write(piece.B[offset : offset+chunk.length])
+			_, err = f.file.WriteAt(piece.B[offset:offset+chunk.length], chunk.offsetOfFile)
 			if err != nil {
 				d.setError(err)
 				return

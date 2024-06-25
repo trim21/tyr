@@ -52,6 +52,8 @@ func (d *Download) initCheck() error {
 		}
 	}()
 
+	//bucket := ratelimit.NewBucketWithQuantum(time.Second/10, units.MiB*500, units.MiB*50)
+
 	// `len(buf.B)` is always 0, and `cap(buf.B)` is always PieceLength
 	// we use `size` to keep trace length of `buf.B`
 	var size int64
@@ -83,6 +85,8 @@ func (d *Download) initCheck() error {
 				return errgo.Wrap(err, fmt.Sprintf("failed to read file %s", fp))
 			}
 			size += chunk.length
+
+			//bucket.Wait(chunk.length)
 
 			fileSeekCache[chunk.fileIndex] = chunk.offsetOfFile + chunk.length
 		}
