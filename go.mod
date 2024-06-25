@@ -6,7 +6,7 @@ toolchain go1.22.4
 
 require (
 	github.com/BurntSushi/toml v1.4.0
-	github.com/RoaringBitmap/roaring/v2 v2.2.2
+	github.com/RoaringBitmap/roaring/v2 v2.3.0
 	github.com/anacrolix/generics v0.0.2-0.20240227122613-f95486179cab
 	github.com/anacrolix/torrent v1.56.1
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
