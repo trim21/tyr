@@ -1,15 +1,12 @@
 package jsonrpc
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"reflect"
-	"sync"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/swaggest/openapi-go"
@@ -155,34 +152,14 @@ var errEmptyBody = errors.New("empty body")
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset: utf-8")
 
-	reqBody, err := io.ReadAll(r.Body)
-	if err != nil {
-		h.fail(w, fmt.Errorf("failed to read request body: %w", err), CodeParseError)
-
-		return
-	}
-
-	reqBody = bytes.TrimLeft(reqBody, " \t\r\n")
-	if len(reqBody) == 0 {
-		h.fail(w, errEmptyBody, CodeParseError)
-
-		return
-	}
-
 	ctx := r.Context()
-
-	if reqBody[0] == '[' {
-		h.serveBatch(ctx, w, reqBody)
-
-		return
-	}
 
 	var (
 		req  Request
 		resp Response
 	)
 
-	if err := json.Unmarshal(reqBody, &req); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.fail(w, fmt.Errorf("failed to unmarshal request: %w", err), CodeParseError)
 
 		return
@@ -199,10 +176,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	h.invoke(ctx, req, &resp)
 
-	if req.ID == nil {
-		return
-	}
-
 	data, err := json.Marshal(resp)
 	if err != nil {
 		h.fail(w, err, CodeInternalError)
@@ -215,64 +188,64 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) serveBatch(ctx context.Context, w http.ResponseWriter, reqBody []byte) {
-	var reqs []Request
-	if err := json.Unmarshal(reqBody, &reqs); err != nil {
-		h.fail(w, fmt.Errorf("failed to unmarshal request: %w", err), CodeInvalidRequest)
+//func (h *Handler) serveBatch(ctx context.Context, w http.ResponseWriter, reqBody []byte) {
+//	var reqs []Request
+//	if err := json.Unmarshal(reqBody, &reqs); err != nil {
+//		h.fail(w, fmt.Errorf("failed to unmarshal request: %w", err), CodeInvalidRequest)
+//
+//		return
+//	}
+//
+//	wg := sync.WaitGroup{}
+//	wg.Add(len(reqs))
+//
+//	resps := make([]*Response, 0, len(reqs))
+//
+//	for _, req := range reqs {
+//		req := req
+//		resp := Response{
+//			JSONRPC: ver,
+//		}
+//
+//		if req.ID != nil {
+//			resp.ID = req.ID
+//			resps = append(resps, &resp)
+//		}
+//
+//		if req.JSONRPC != ver {
+//			resp.Error = &Error{
+//				Code:    CodeInvalidRequest,
+//				Message: fmt.Sprintf("invalid jsonrpc value: %q", req.JSONRPC),
+//			}
+//
+//			continue
+//		}
+//
+//		go func() {
+//			defer wg.Done()
+//
+//			h.invoke(ctx, req, &resp)
+//		}()
+//	}
+//
+//	wg.Wait()
+//
+//	data, err := json.Marshal(resps)
+//	if err != nil {
+//		h.fail(w, err, CodeInternalError)
+//
+//		return
+//	}
+//
+//	if _, err := w.Write(data); err != nil {
+//		h.fail(w, err, CodeInternalError)
+//	}
+//}
 
-		return
-	}
-
-	wg := sync.WaitGroup{}
-	wg.Add(len(reqs))
-
-	resps := make([]*Response, 0, len(reqs))
-
-	for _, req := range reqs {
-		req := req
-		resp := Response{
-			JSONRPC: ver,
-		}
-
-		if req.ID != nil {
-			resp.ID = req.ID
-			resps = append(resps, &resp)
-		}
-
-		if req.JSONRPC != ver {
-			resp.Error = &Error{
-				Code:    CodeInvalidRequest,
-				Message: fmt.Sprintf("invalid jsonrpc value: %q", req.JSONRPC),
-			}
-
-			continue
-		}
-
-		go func() {
-			defer wg.Done()
-
-			h.invoke(ctx, req, &resp)
-		}()
-	}
-
-	wg.Wait()
-
-	data, err := json.Marshal(resps)
-	if err != nil {
-		h.fail(w, err, CodeInternalError)
-
-		return
-	}
-
-	if _, err := w.Write(data); err != nil {
-		h.fail(w, err, CodeInternalError)
-	}
-}
-
-type structuredErrorData struct {
-	Error   string         `json:"error"`
-	Context map[string]any `json:"context"`
-}
+//type structuredErrorData struct {
+//	Error   string         `json:"error"`
+//	Context map[string]any `json:"context"`
+//}
 
 func (h *Handler) invoke(ctx context.Context, req Request, resp *Response) {
 	var input, output any
@@ -310,10 +283,10 @@ func (h *Handler) invoke(ctx context.Context, req Request, resp *Response) {
 		return
 	}
 
-	h.encode(ctx, m, req, resp, output)
+	h.encode(resp, output)
 }
 
-func (h *Handler) encode(ctx context.Context, m method, req Request, resp *Response, output any) {
+func (h *Handler) encode(resp *Response, output any) {
 	data, err := json.Marshal(output)
 	if err != nil {
 		resp.Error = &Error{

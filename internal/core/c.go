@@ -133,6 +133,26 @@ func (c *Client) AddTorrent(m *metainfo.MetaInfo, info meta.Info, downloadPath s
 	return nil
 }
 
+type DownloadInfo struct {
+	Name string
+	Tags []string
+}
+
+func (c *Client) GetTorrent(h meta.Hash) (DownloadInfo, error) {
+	c.m.RLock()
+	defer c.m.RUnlock()
+
+	d, ok := c.downloadMap[h]
+	if !ok {
+		return DownloadInfo{}, fmt.Errorf("torrent %s not exists", h)
+	}
+
+	return DownloadInfo{
+		Name: d.info.Name,
+		Tags: d.tags,
+	}, nil
+}
+
 func (c *Client) addCheck(d *Download) {
 	c.m.Lock()
 	defer c.m.Unlock()

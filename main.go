@@ -118,12 +118,12 @@ func main() {
 
 	{
 		m := lo.Must(metainfo.LoadFromFile(`C:\Users\Trim21\Downloads\ubuntu-24.04-desktop-amd64.iso.torrent.patched`))
-		lo.Must0(app.AddTorrent(m, lo.Must(meta.FromTorrent(*m)), "D:\\Downloads\\ubuntu", strings.Split("a q e", " ")))
+		lo.Must0(app.AddTorrent(m, lo.Must(meta.FromTorrent(*m)), "D:\\Downloads\\ubuntu", nil))
 	}
 
 	{
 		m := lo.Must(metainfo.LoadFromFile(`C:\Users\Trim21\Downloads\qwer.torrent`))
-		lo.Must0(app.AddTorrent(m, lo.Must(meta.FromTorrent(*m)), "D:\\Downloads\\qwer", strings.Split("a q e", " ")))
+		lo.Must0(app.AddTorrent(m, lo.Must(meta.FromTorrent(*m)), "D:\\Downloads\\qwer", nil))
 	}
 
 	var done = make(chan empty.Empty)

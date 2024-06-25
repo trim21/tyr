@@ -38,6 +38,39 @@
           }
         ]
       }
+    },
+    "torrent.get": {
+      "post": {
+        "summary": "Get Torrent",
+        "description": "",
+        "operationId": "torrent.get",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebGetTorrentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebGetTorrentResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "api-key": []
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -79,6 +112,36 @@
           "info_hash": {
             "type": "string",
             "description": "torrent file hash"
+          }
+        }
+      },
+      "WebGetTorrentRequest": {
+        "required": [
+          "info_hash"
+        ],
+        "type": "object",
+        "properties": {
+          "info_hash": {
+            "type": "string",
+            "description": "torrent file hash"
+          }
+        }
+      },
+      "WebGetTorrentResponse": {
+        "required": [
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
           }
         }
       }

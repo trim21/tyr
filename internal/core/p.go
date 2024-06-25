@@ -86,6 +86,9 @@ func newPeer(
 		Address:              addr,
 		//ResChan:   make(chan req.Response, 1),
 		requests: xsync.NewMapOf[proto.ChunkRequest, empty.Empty](),
+		rejected: xsync.NewMapOf[proto.ChunkRequest, empty.Empty](),
+
+		allowFast: bm.New(d.info.NumPieces),
 	}
 
 	p.QueueLimit.Store(250)
@@ -109,6 +112,8 @@ type Peer struct {
 	cancel                    context.CancelFunc
 	Bitmap                    *bm.Bitmap
 	requests                  *xsync.MapOf[proto.ChunkRequest, empty.Empty]
+	rejected                  *xsync.MapOf[proto.ChunkRequest, empty.Empty]
+	allowFast                 *bm.Bitmap
 	ioOut                     *flowrate.Monitor
 	ioIn                      *flowrate.Monitor
 	UserAgent                 atomic.Pointer[string]
@@ -309,7 +314,9 @@ func (p *Peer) start(skipHandshake bool) {
 		case proto.HaveNone:
 			p.Bitmap.Clear()
 		case proto.Reject:
+			p.rejected.Store(event.Req, empty.Empty{})
 		case proto.AllowedFast:
+			p.allowFast.Set(event.Index)
 		// currently unsupported
 
 		// currently ignored

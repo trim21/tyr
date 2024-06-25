@@ -33,10 +33,12 @@ const HeaderAuthorization = "Authorization"
 
 func New(c *core.Client, token string, debug bool) http.Handler {
 	apiSchema := jsonrpc.OpenAPI{}
-	apiSchema.Reflector().SpecEns().Info.Title = "JSON-RPC"
-	apiSchema.Reflector().SpecEns().Info.Version = "0.0.1"
-	apiSchema.Reflector().SpecEns().Info.WithDescription(desc)
-	apiSchema.Reflector().SpecEns().SetAPIKeySecurity("api-key", HeaderAuthorization, openapi.InHeader, "need set api header")
+	apiSchema.Reflector().SpecEns().Info.
+		WithTitle("JSON-RPC").
+		WithVersion("0.0.1").
+		WithDescription(desc)
+	apiSchema.Reflector().SpecEns().
+		SetAPIKeySecurity("api-key", HeaderAuthorization, openapi.InHeader, "need set api header")
 
 	v := validator.New()
 
@@ -63,15 +65,20 @@ func New(c *core.Client, token string, debug bool) http.Handler {
 	})
 
 	if debug {
+		r.Get("/debug/headers", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(r.Header)
+		})
 		r.Mount("/debug", middleware.Profiler())
 	}
 
 	AddTorrent(h, c)
+	GetTorrent(h, c)
 
 	var auth = func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Header.Get(HeaderAuthorization) != token {
-				w.WriteHeader(401)
+				w.WriteHeader(http.StatusUnauthorized)
 				_ = json.NewEncoder(w).Encode(jsonrpc.Response{
 					JSONRPC: "2.0",
 					Error: &jsonrpc.Error{
@@ -89,16 +96,16 @@ func New(c *core.Client, token string, debug bool) http.Handler {
 		})
 	}
 
-	r.With(auth).Post("/json_rpc", h.ServeHTTP)
-	r.Get("/docs/openapi.json", h.OpenAPI.ServeHTTP)
-	r.Get("/docs/*", v5.NewHandlerWithConfig(swgui.Config{
+	r.With(auth).Handle("POST /json_rpc", h)
+	r.Handle("GET /docs/openapi.json", h.OpenAPI)
+	r.Handle("GET /docs/*", v5.NewHandlerWithConfig(swgui.Config{
 		Title:       apiSchema.Reflector().Spec.Info.Title,
 		SwaggerJSON: "/docs/openapi.json",
 		BasePath:    "/docs/",
 		SettingsUI:  jsonrpc.SwguiSettings(util.StrMap{"layout": "'BaseLayout'"}, "/json_rpc"),
-	}).ServeHTTP)
+	}))
 
-	r.Handle("/*", http.FileServerFS(frontendFS))
+	r.Handle("GET /*", http.FileServerFS(frontendFS))
 
 	if global.Dev {
 		lo.Must0(

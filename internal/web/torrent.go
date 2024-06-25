@@ -3,6 +3,7 @@ package web
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"fmt"
 	"path/filepath"
 
@@ -65,10 +66,50 @@ func AddTorrent(h *jsonrpc.Handler, c *core.Client) {
 				return CodeError(5, errgo.Wrap(err, "failed to add torrent to download"))
 			}
 
-			*res = AddTorrentResponse{InfoHash: m.HashInfoBytes().HexString()}
+			res.InfoHash = m.HashInfoBytes().HexString()
+
 			return nil
 		},
 	)
 	u.SetName("torrent.add")
+	h.Add(u)
+}
+
+type GetTorrentRequest struct {
+	InfoHash string `json:"info_hash" description:"torrent file hash" required:"true"`
+}
+
+type GetTorrentResponse struct {
+	Name string   `json:"name" required:"true"`
+	Tags []string `json:"tags"`
+}
+
+func GetTorrent(h *jsonrpc.Handler, c *core.Client) {
+	u := usecase.NewInteractor[*GetTorrentRequest, GetTorrentResponse](
+		func(ctx context.Context, req *GetTorrentRequest, res *GetTorrentResponse) error {
+			r, err := hex.DecodeString(req.InfoHash)
+			if err != nil || len(r) != 20 {
+				return CodeError(1, errgo.Wrap(err, "invalid info_hash"))
+			}
+
+			info, err := c.GetTorrent(meta.Hash(r))
+
+			if err != nil {
+				return CodeError(2, errgo.Wrap(err, "failed to get download"))
+			}
+
+			res.Name = info.Name
+
+			if info.Tags == nil {
+				res.Tags = []string{}
+			} else {
+				res.Tags = info.Tags
+			}
+
+			return nil
+		},
+	)
+
+	u.SetName("torrent.get")
 	h.Add(u)
 }
