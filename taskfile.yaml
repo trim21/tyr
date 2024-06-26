@@ -17,21 +17,21 @@ tasks:
     generates:
       - dist/tmp/tmp.exe
     env:
-      #      CGO_ENABLED: '0'
       GORACE: halt_on_error=1
     sources:
       - go.mod
       - go.sum
       - "**/*.go"
     vars:
-      BRANCH:
-        sh: git branch --show-current
+      REF:
+        sh: git describe --dirty=' (dirty)' --first-parent --all
       SHA:
         sh: git rev-parse --short HEAD
     cmds:
       - >-
-        go build -ldflags="-X 'github.com/prometheus/common/version.Branch={{ .BRANCH }}' -X 'github.com/prometheus/common/version.Revision={{ .SHA }}'" 
-        -buildvcs=true -tags assert -o dist/tmp/tmp.exe main.go
+        go build
+        -ldflags="-X 'tyr/internal/version.Ref={{ .REF }}' -X 'tyr/internal/version.BuildDate={{ dateInZone "2006-01-02T15:04:05Z07:00" (now) "UTC" }}'" 
+        -buildvcs=true -trimpath -tags assert -o dist/tmp/tmp.exe
       - cp dist/tmp/tmp.exe dist/tmp/server.exe
 
   dev:
