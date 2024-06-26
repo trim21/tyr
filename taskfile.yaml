@@ -23,8 +23,15 @@ tasks:
       - go.mod
       - go.sum
       - "**/*.go"
+    vars:
+      BRANCH:
+        sh: git branch --show-current
+      SHA:
+        sh: git rev-parse --short HEAD
     cmds:
-      - go build -buildvcs=auto -tags assert -o dist/tmp/tmp.exe main.go
+      - >-
+        go build -ldflags="-X 'github.com/prometheus/common/version.Branch={{ .BRANCH }}' -X 'github.com/prometheus/common/version.Revision={{ .SHA }}'" 
+        -buildvcs=true -tags assert -o dist/tmp/tmp.exe main.go
       - cp dist/tmp/tmp.exe dist/tmp/server.exe
 
   dev:

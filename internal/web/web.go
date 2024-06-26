@@ -2,7 +2,6 @@ package web
 
 import (
 	_ "embed"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -25,10 +24,6 @@ import (
 
 //go:embed description.md
 var desc string
-
-type jsonRpcRequest struct {
-	ID json.RawMessage `json:"id"`
-}
 
 const HeaderAuthorization = "Authorization"
 
@@ -66,6 +61,7 @@ func New(c *core.Client, token string, enableDebug bool) http.Handler {
 		r.With(middleware.NoCache).Get("/debug/headers", func(w http.ResponseWriter, r *http.Request) {
 			res.JSON(w, http.StatusOK, r.Header)
 		})
+
 		info, ok := debug.ReadBuildInfo()
 		if ok {
 			r.Get("/debug/version", func(w http.ResponseWriter, r *http.Request) {
