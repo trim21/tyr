@@ -54,7 +54,7 @@ func New(c *core.Client, token string, enableDebug bool) http.Handler {
 	r := chi.NewMux()
 	r.Use(middleware.Recoverer)
 
-	r.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
+	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		res.Text(w, http.StatusOK, ".")
 	})
 
