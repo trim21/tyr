@@ -1,7 +1,7 @@
 version: 3
 
 tasks:
-  test: go test ./...
+  test: gotestsum --format-hide-empty-pkg
 
   build:
     generates:
@@ -20,20 +20,27 @@ tasks:
       #      CGO_ENABLED: '0'
       GORACE: halt_on_error=1
     sources:
-      - .env
       - go.mod
       - go.sum
       - "**/*.go"
-    cmd: go build -tags assert -o dist/tmp/tmp.exe main.go
+    cmds:
+      - go build -buildvcs=auto -tags assert -o dist/tmp/tmp.exe main.go
+      - cp dist/tmp/tmp.exe dist/tmp/server.exe
 
   dev:
     watch: true
     deps:
       - build:dev
+    generates:
+      - tmp/non-exists-file-so-it-always-run
+    sources:
+      - .env
+      - go.mod
+      - go.sum
+      - "**/*.go"
     dotenv:
       - .env
     cmds:
-      - cp dist/tmp/tmp.exe dist/tmp/server.exe
       - dist/tmp/server.exe --debug --web 127.0.0.1:8002 --config-file ./config.toml
   #
   #  dev:release:

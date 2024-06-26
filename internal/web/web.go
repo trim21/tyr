@@ -3,23 +3,24 @@ package web
 import (
 	_ "embed"
 	"encoding/json"
+	"fmt"
 	"net/http"
-	"os"
 	"reflect"
+	"runtime/debug"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-playground/validator/v10"
-	"github.com/samber/lo"
+	"github.com/prometheus/common/version"
 	"github.com/swaggest/openapi-go"
 	"github.com/swaggest/swgui"
 	v5 "github.com/swaggest/swgui/v5"
 
 	"tyr/internal/core"
-	"tyr/internal/pkg/global"
 	"tyr/internal/util"
 	"tyr/internal/web/jsonrpc"
+	"tyr/internal/web/res"
 )
 
 //go:embed description.md
@@ -31,7 +32,7 @@ type jsonRpcRequest struct {
 
 const HeaderAuthorization = "Authorization"
 
-func New(c *core.Client, token string, debug bool) http.Handler {
+func New(c *core.Client, token string, enableDebug bool) http.Handler {
 	apiSchema := jsonrpc.OpenAPI{}
 	apiSchema.Reflector().SpecEns().Info.
 		WithTitle("JSON-RPC").
@@ -58,17 +59,25 @@ func New(c *core.Client, token string, debug bool) http.Handler {
 	r := chi.NewMux()
 	r.Use(middleware.Recoverer)
 	r.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("."))
-		return
+		res.Text(w, http.StatusOK, ".")
 	})
 
-	if debug {
-		r.Get("/debug/headers", func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			_ = json.NewEncoder(w).Encode(r.Header)
+	if enableDebug {
+		r.With(middleware.NoCache).Get("/debug/headers", func(w http.ResponseWriter, r *http.Request) {
+			res.JSON(w, http.StatusOK, r.Header)
 		})
+		info, ok := debug.ReadBuildInfo()
+		if ok {
+			r.Get("/debug/version", func(w http.ResponseWriter, r *http.Request) {
+				_, _ = fmt.Fprintln(w, version.Print("tyr"))
+				_, _ = fmt.Fprintln(w, version.GetRevision())
+				_, _ = fmt.Fprintln(w, info.String())
+			})
+		} else {
+			r.Get("/debug/version", func(w http.ResponseWriter, r *http.Request) {
+				_, _ = fmt.Fprintln(w, "build info not available")
+			})
+		}
 		r.Mount("/debug", middleware.Profiler())
 	}
 
@@ -78,8 +87,7 @@ func New(c *core.Client, token string, debug bool) http.Handler {
 	var auth = func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Header.Get(HeaderAuthorization) != token {
-				w.WriteHeader(http.StatusUnauthorized)
-				_ = json.NewEncoder(w).Encode(jsonrpc.Response{
+				res.JSON(w, http.StatusUnauthorized, jsonrpc.Response{
 					JSONRPC: "2.0",
 					Error: &jsonrpc.Error{
 						Code:    jsonrpc.CodeInvalidRequest,
@@ -96,8 +104,10 @@ func New(c *core.Client, token string, debug bool) http.Handler {
 		})
 	}
 
-	r.With(auth).Handle("POST /json_rpc", h)
-	r.Handle("GET /docs/openapi.json", h.OpenAPI)
+	r.With(middleware.NoCache, auth).Handle("POST /json_rpc", h)
+
+	r.Get("/docs/openapi.json", h.OpenAPI.ServeHTTP)
+
 	r.Handle("GET /docs/*", v5.NewHandlerWithConfig(swgui.Config{
 		Title:       apiSchema.Reflector().Spec.Info.Title,
 		SwaggerJSON: "/docs/openapi.json",
@@ -106,16 +116,6 @@ func New(c *core.Client, token string, debug bool) http.Handler {
 	}))
 
 	r.Handle("GET /*", http.FileServerFS(frontendFS))
-
-	if global.Dev {
-		lo.Must0(
-			os.WriteFile(
-				"./internal/web/openapi.json",
-				lo.Must(json.MarshalIndent(apiSchema.Reflector().Spec, "", "  ")),
-				os.ModePerm,
-			),
-		)
-	}
 
 	return r
 }

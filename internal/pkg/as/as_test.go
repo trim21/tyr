@@ -27,3 +27,19 @@ func TestUint32(t *testing.T) {
 		as.Uint32(math.MaxUint32 + 1)
 	})
 }
+
+func TestUint64(t *testing.T) {
+	require.Equal(t, uint64(5), as.Uint64(int8(5)))
+	require.Equal(t, uint64(5), as.Uint64(int16(5)))
+	require.Equal(t, uint64(5), as.Uint64(int32(5)))
+	require.Equal(t, uint64(5), as.Uint64(int64(5)))
+	require.Equal(t, uint64(5), as.Uint64(int(5)))
+	require.Equal(t, uint64(5), as.Uint64(uint8(5)))
+	require.Equal(t, uint64(5), as.Uint64(uint16(5)))
+	require.Equal(t, uint64(5), as.Uint64(uint32(5)))
+	require.Equal(t, uint64(5), as.Uint64(uint(5)))
+
+	assert.Panics(t, func() {
+		as.Uint64(-1)
+	})
+}

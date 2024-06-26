@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/anacrolix/torrent/bencode"
 	"github.com/stretchr/testify/require"
 
 	"tyr/internal/pkg/null"
@@ -62,5 +63,32 @@ func TestNull_UnmarshalJSON(t *testing.T) {
 
 	n = null.Int{}
 	require.NoError(t, json.Unmarshal([]byte(" null "), &n))
-	require.False(t, false, n.Set)
+	require.False(t, n.Set)
+}
+
+func Test_UnmarshalBencode(t *testing.T) {
+	t.Parallel()
+
+	var n null.Int
+	require.NoError(t, bencode.Unmarshal([]byte("i10e"), &n))
+	require.EqualValues(t, 10, n.Value)
+
+	var s struct {
+		N null.Int `bencode:"n"`
+	}
+	require.NoError(t, bencode.Unmarshal([]byte("de"), &s))
+	require.False(t, s.N.Set)
+
+	var s2 struct {
+		N null.Null[bencode.Bytes] `bencode:"n"`
+	}
+	require.NoError(t, bencode.Unmarshal([]byte("de"), &s2))
+	require.False(t, s2.N.Set)
+
+	var s3 struct {
+		N null.Null[bencode.Bytes] `bencode:"n"`
+	}
+	require.NoError(t, bencode.Unmarshal([]byte("d1:ni10ee"), &s3))
+	require.True(t, s3.N.Set)
+	require.EqualValues(t, bencode.Bytes("i10e"), s3.N.Value)
 }

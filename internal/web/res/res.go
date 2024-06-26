@@ -1,0 +1,20 @@
+package res
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"tyr/internal/pkg/unsafe"
+)
+
+func JSON(w http.ResponseWriter, code int, value any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(value)
+}
+
+func Text(w http.ResponseWriter, code int, value string) {
+	w.Header().Set("Content-Type", "plain/text")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(unsafe.Bytes(value))
+}

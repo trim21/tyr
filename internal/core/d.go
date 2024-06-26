@@ -90,9 +90,9 @@ type Download struct {
 }
 
 type fileOpenCache struct {
-	borrowed bool
-	index    int
 	file     *os.File
+	index    int
+	borrowed bool
 }
 
 func (c *Client) NewDownload(m *metainfo.MetaInfo, info meta.Info, basePath string, tags []string) *Download {
@@ -201,7 +201,7 @@ func (d *Download) Display() string {
 		}
 	}
 
-	_, _ = fmt.Fprintf(buf, "%-12s | %s | %5.1f%% | %8s | %9s (%9s) ↓ | %8s | %6s | %d | %9s",
+	_, _ = fmt.Fprintf(buf, "%-11s | %s | %5.1f%% | %8s | %9s (%9s) ↓ | %8s | %6s | %d | %9s",
 		d.state.String(),
 		d.info.Hash,
 		float64(completed*1000/d.info.TotalLength)/10,

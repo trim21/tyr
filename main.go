@@ -12,7 +12,6 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/anacrolix/torrent/metainfo"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/samber/lo"
@@ -22,7 +21,6 @@ import (
 
 	"tyr/internal/config"
 	"tyr/internal/core"
-	"tyr/internal/meta"
 	"tyr/internal/pkg/empty"
 	"tyr/internal/pkg/random"
 	_ "tyr/internal/platform" // deny compile on unsupported platform
@@ -116,15 +114,15 @@ func main() {
 		errExit("failed to listen on p2p port", e)
 	}
 
-	{
-		m := lo.Must(metainfo.LoadFromFile(`C:\Users\Trim21\Downloads\ubuntu-24.04-desktop-amd64.iso.torrent.patched`))
-		lo.Must0(app.AddTorrent(m, lo.Must(meta.FromTorrent(*m)), "D:\\Downloads\\ubuntu", nil))
-	}
-
-	{
-		m := lo.Must(metainfo.LoadFromFile(`C:\Users\Trim21\Downloads\qwer.torrent`))
-		lo.Must0(app.AddTorrent(m, lo.Must(meta.FromTorrent(*m)), "D:\\Downloads\\qwer", nil))
-	}
+	//{
+	//	m := lo.Must(metainfo.LoadFromFile(`C:\Users\Trim21\Downloads\ubuntu-24.04-desktop-amd64.iso.torrent.patched`))
+	//	lo.Must0(app.AddTorrent(m, lo.Must(meta.FromTorrent(*m)), "D:\\Downloads\\ubuntu", nil))
+	//}
+	//
+	//{
+	//	m := lo.Must(metainfo.LoadFromFile(`C:\Users\Trim21\Downloads\qwer.torrent`))
+	//	lo.Must0(app.AddTorrent(m, lo.Must(meta.FromTorrent(*m)), "D:\\Downloads\\qwer", nil))
+	//}
 
 	var done = make(chan empty.Empty)
 

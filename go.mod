@@ -21,6 +21,7 @@ require (
 	github.com/jellydator/ttlcache/v3 v3.2.0
 	github.com/negrel/assert v0.2.0
 	github.com/panjf2000/ants/v2 v2.10.0
+	github.com/prometheus/common v0.54.0
 	github.com/puzpuzpuz/xsync/v3 v3.2.0
 	github.com/rs/zerolog v1.33.0
 	github.com/samber/lo v1.39.0
@@ -91,7 +92,6 @@ require (
 	golang.org/x/net v0.26.0 // indirect
 	golang.org/x/sys v0.21.0 // indirect
 	golang.org/x/text v0.16.0 // indirect
-	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
