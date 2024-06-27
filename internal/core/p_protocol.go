@@ -8,6 +8,7 @@ import (
 
 	"github.com/RoaringBitmap/roaring/v2"
 	"github.com/anacrolix/torrent/bencode"
+	"github.com/docker/go-units"
 	"github.com/fatih/color"
 	"github.com/negrel/assert"
 	"github.com/trim21/errgo"
@@ -63,16 +64,18 @@ type extension struct {
 
 func (p *Peer) DecodeEvents() (Event, error) {
 	_ = p.Conn.SetReadDeadline(time.Now().Add(time.Minute * 4))
-
-	var b [4]byte
-	n, err := io.ReadFull(p.Conn, b[:])
+	n, err := io.ReadFull(p.Conn, p.readSizeBuf[:])
 	if err != nil {
 		return Event{}, err
 	}
 
 	assert.Equal(4, n)
 
-	size := binary.BigEndian.Uint32(b[:])
+	size := binary.BigEndian.Uint32(p.readSizeBuf[:])
+
+	if size >= units.MiB {
+		return Event{}, ErrPeerSendInvalidData
+	}
 
 	// keep alive
 	if size == 0 {
@@ -81,7 +84,7 @@ func (p *Peer) DecodeEvents() (Event, error) {
 	}
 
 	p.log.Trace().Msgf("try to decode message with length %d", size)
-	n, err = io.ReadFull(p.Conn, b[:1])
+	n, err = io.ReadFull(p.Conn, p.readSizeBuf[:1])
 	if err != nil {
 		return Event{}, err
 	}
@@ -89,7 +92,7 @@ func (p *Peer) DecodeEvents() (Event, error) {
 	assert.Equal(n, 1)
 
 	var event Event
-	event.Event = proto.Message(b[0])
+	event.Event = proto.Message(p.readSizeBuf[0])
 	p.log.Trace().Msgf("try to decode message event %s", color.BlueString(event.Event.String()))
 	switch event.Event {
 	case proto.Choke, proto.Unchoke,
@@ -113,11 +116,11 @@ func (p *Peer) DecodeEvents() (Event, error) {
 	case proto.Reject:
 		return p.decodeReject()
 	case proto.Extended:
-		if _, err = io.ReadFull(p.Conn, b[:1]); err != nil {
+		if _, err = io.ReadFull(p.Conn, p.readSizeBuf[:1]); err != nil {
 			return event, err
 		}
 
-		if b[0] == 0 {
+		if p.readSizeBuf[0] == 0 {
 			err = bencode.NewDecoder(io.LimitReader(p.Conn, int64(size-2))).Decode(&event.ExtHandshake)
 			return event, err
 		}

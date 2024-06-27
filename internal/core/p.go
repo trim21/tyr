@@ -129,6 +129,7 @@ type Peer struct {
 	bitfieldSize              uint32
 	supportFastExtension      bool
 	supportExtensionHandshake bool
+	readSizeBuf               [4]byte
 }
 
 func (p *Peer) Response(res proto.ChunkResponse) {
@@ -426,3 +427,14 @@ func parsePeerID(id PeerID) string {
 
 	return string(id[:6])
 }
+
+//var eventPool = pool.NewWithReset(func() *Event {
+//	return &Event{}
+//}, func(event *Event) bool {
+//	// we don't actually need to reset other
+//	event.Event = 0
+//	event.Ignored = false
+//	event.Res = proto.ChunkResponse{}
+//	event.Req = proto.ChunkRequest{}
+//	return true
+//})

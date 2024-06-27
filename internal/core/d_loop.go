@@ -10,7 +10,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/docker/go-units"
 	"github.com/dustin/go-humanize"
 	"github.com/rs/zerolog/log"
@@ -18,6 +17,7 @@ import (
 	"tyr/internal/meta"
 	"tyr/internal/pkg/as"
 	"tyr/internal/pkg/bufpool"
+	"tyr/internal/pkg/filepool"
 	"tyr/internal/pkg/global/tasks"
 	"tyr/internal/proto"
 )
@@ -27,7 +27,7 @@ const defaultBlockSize = units.KiB * 16
 func (d *Download) Start() {
 	d.m.Lock()
 	if d.done.Load() {
-		d.state = Seeding
+		d.state = Uploading
 	} else {
 		d.state = Downloading
 	}
@@ -70,7 +70,7 @@ func (d *Download) Init() {
 
 	d.m.Lock()
 	if d.bm.Count() == d.info.NumPieces {
-		d.state = Seeding
+		d.state = Uploading
 	} else {
 		d.state = Downloading
 	}
@@ -92,15 +92,22 @@ func (d *Download) startBackground() {
 			}
 
 			d.m.Lock()
-			if d.state == Stopped {
-				d.log.Trace().Msg("paused, waiting")
-				d.cond.Wait()
+
+		LOOP:
+			for {
+				switch d.state {
+				case Uploading, Downloading:
+					break LOOP
+				case Stopped, Moving, Checking, Error:
+					d.cond.Wait()
+				}
 			}
+
 			d.m.Unlock()
 
 			d.connectToPeers()
 
-			time.Sleep(time.Second * 20)
+			time.Sleep(time.Second)
 		}
 	}()
 
@@ -182,35 +189,9 @@ func (d *Download) giveBackFileCache(f *fileOpenCache) {
 	d.fileOpenMutex.Broadcast()
 }
 
-func (d *Download) openFileWithCache(fileIndex int) (*fileOpenCache, error) {
-	d.fileOpenMutex.L.Lock()
-	defer d.fileOpenMutex.L.Unlock()
-
-	f, ok := d.fileOpenCache[fileIndex]
-	if !ok {
-		f, err := os.OpenFile(filepath.Join(d.basePath, d.info.Files[fileIndex].Path), os.O_RDWR|os.O_CREATE, os.ModePerm)
-		if err != nil {
-			return nil, err
-		}
-
-		fc := &fileOpenCache{
-			file:     f,
-			index:    fileIndex,
-			borrowed: true,
-		}
-
-		d.fileOpenCache[fileIndex] = fc
-
-		return fc, nil
-	}
-
-	for f.borrowed {
-		d.fileOpenMutex.Wait()
-	}
-
-	f.borrowed = true
-
-	return f, nil
+func (d *Download) openFileWithCache(fileIndex int) (*filepool.File, error) {
+	p := filepath.Join(d.basePath, d.info.Files[fileIndex].Path)
+	return filepool.Open(p, os.O_RDWR|os.O_CREATE, os.ModePerm, time.Hour)
 }
 
 func (d *Download) handleRes(res proto.ChunkResponse) {
@@ -244,7 +225,13 @@ func (d *Download) handleRes(res proto.ChunkResponse) {
 	}
 
 	if filled {
-		go d.writePieceToDisk(res.PieceIndex, chunks)
+		go func() {
+			err := d.writePieceToDisk(res.PieceIndex, chunks)
+			if err != nil {
+				d.setError(err)
+			}
+		}()
+
 		delete(d.pieceData, res.PieceIndex)
 		return
 	}
@@ -253,22 +240,22 @@ func (d *Download) handleRes(res proto.ChunkResponse) {
 }
 
 func (d *Download) writePieceToDisk(pieceIndex uint32, chunks []*proto.ChunkResponse) error {
-	piece := bufpool.Get()
+	buf := bufpool.Get()
 
 	for _, chunk := range chunks {
-		piece.Write(chunk.Data)
+		buf.Write(chunk.Data)
 	}
 
-	h := sha1.Sum(piece.B)
+	h := sha1.Sum(buf.B)
 	if h != d.info.Pieces[pieceIndex] {
 		d.corrupted.Add(d.info.PieceLength)
 		fmt.Println("data mismatch", pieceIndex)
-		bufpool.Put(piece)
+		bufpool.Put(buf)
 		return nil
 	}
 
 	tasks.Submit(func() {
-		defer bufpool.Put(piece)
+		defer bufpool.Put(buf)
 		pieces := d.pieceInfo[pieceIndex]
 		var offset int64 = 0
 
@@ -278,9 +265,9 @@ func (d *Download) writePieceToDisk(pieceIndex uint32, chunks []*proto.ChunkResp
 				d.setError(err)
 				return
 			}
-			defer d.giveBackFileCache(f)
+			defer f.Release()
 
-			_, err = f.file.WriteAt(piece.B[offset:offset+chunk.length], chunk.offsetOfFile)
+			_, err = f.File.WriteAt(buf.B[offset:offset+chunk.length], chunk.offsetOfFile)
 			if err != nil {
 				d.setError(err)
 				return
@@ -295,18 +282,42 @@ func (d *Download) writePieceToDisk(pieceIndex uint32, chunks []*proto.ChunkResp
 
 		d.bm.Set(pieceIndex)
 
-		d.log.Trace().Msgf("piece %d done", pieceIndex)
+		d.log.Trace().Msgf("buf %d done", pieceIndex)
 		d.have(pieceIndex)
 
 		if d.bm.Count() == d.info.NumPieces {
 			d.m.Lock()
-			d.state = Seeding
+			d.state = Uploading
 			d.ioDown.Reset()
 			d.m.Unlock()
 		}
 	})
 
 	return nil
+}
+
+func (d *Download) readPiece(index uint32) ([]byte, error) {
+	pieces := d.pieceInfo[index]
+	var buf = make([]byte, d.pieceLength(index))
+
+	var offset int64 = 0
+	for _, chunk := range pieces.fileChunks {
+		f, err := d.openFileWithCache(chunk.fileIndex)
+		if err != nil {
+			return nil, err
+		}
+
+		_, err = f.File.ReadAt(buf[offset:offset+chunk.length], chunk.offsetOfFile)
+		if err != nil {
+			f.Release()
+			return nil, err
+		}
+
+		offset += chunk.length
+		f.Release()
+	}
+
+	return buf, nil
 }
 
 func (d *Download) backgroundReqHandle() {
@@ -322,7 +333,7 @@ func (d *Download) backgroundReqHandle() {
 				return
 			}
 			d.m.Lock()
-			if d.state == Seeding {
+			if d.state == Uploading {
 				d.cond.Wait()
 			}
 			d.m.Unlock()
@@ -477,10 +488,7 @@ func (d *Download) scheduleSeq() {
 				return true
 			}
 
-			for i, chunk := range chunks {
-				if i == 25 {
-					spew.Dump(chunk)
-				}
+			for _, chunk := range chunks {
 				p.Request(chunk)
 			}
 
@@ -496,5 +504,4 @@ func (d *Download) scheduleSeq() {
 			break
 		}
 	}
-	//}
 }

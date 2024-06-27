@@ -31,12 +31,12 @@ import (
 type State uint8
 
 //go:generate stringer -type=State
-const Downloading State = 0
-const Stopped State = 1
-const Seeding State = 2
+const Stopped State = 0
+const Downloading State = 1
+const Uploading State = 2
 const Checking State = 3
-const Moving State = 3
-const Error State = 4
+const Moving State = 4
+const Error State = 5
 
 // Download manage a download task
 // ctx should be canceled when torrent is removed, not stopped.
@@ -55,38 +55,36 @@ type Download struct {
 	connectionHistory *xsync.MapOf[netip.AddrPort, connHistory]
 	bm                *bm.Bitmap
 	pieceData         map[uint32][]*proto.ChunkResponse
+	peers             *peersHeap
+	fileOpenMutex     *sync.Cond
+	fileOpenCache     map[int]*fileOpenCache
 	basePath          string
 	key               string
 	downloadDir       string
-	//pieceChunks       [][]proto.ChunkRequest
-	tags            []string
-	pieceInfo       []pieceFileChunks
-	trackers        []TrackerTier
-	peers           *peersHeap
-	info            meta.Info
-	AddAt           int64
-	CompletedAt     atomic.Int64
-	downloaded      atomic.Int64
-	corrupted       atomic.Int64
-	done            atomic.Bool
-	uploaded        atomic.Int64
-	completed       atomic.Int64
-	checkProgress   atomic.Int64
-	uploadAtStart   int64
-	downloadAtStart int64
-	lazyInitialized atomic.Bool
-	seq             atomic.Bool
-	announcePending atomic.Bool
-	pdMutex         sync.RWMutex
-	m               sync.RWMutex
-	peersMutex      sync.RWMutex
-	connMutex       sync.RWMutex
-	peerID          PeerID
-	state           State
-	private         bool
-
-	fileOpenMutex *sync.Cond
-	fileOpenCache map[int]*fileOpenCache
+	tags              []string
+	pieceInfo         []pieceFileChunks
+	trackers          []TrackerTier
+	info              meta.Info
+	AddAt             int64
+	CompletedAt       atomic.Int64
+	downloaded        atomic.Int64
+	corrupted         atomic.Int64
+	done              atomic.Bool
+	uploaded          atomic.Int64
+	completed         atomic.Int64
+	checkProgress     atomic.Int64
+	uploadAtStart     int64
+	downloadAtStart   int64
+	lazyInitialized   atomic.Bool
+	seq               atomic.Bool
+	announcePending   atomic.Bool
+	pdMutex           sync.RWMutex
+	m                 sync.RWMutex
+	peersMutex        sync.RWMutex
+	connMutex         sync.RWMutex
+	peerID            PeerID
+	state             State
+	private           bool
 }
 
 type fileOpenCache struct {
@@ -202,7 +200,7 @@ func (d *Download) Display() string {
 	}
 
 	_, _ = fmt.Fprintf(buf, "%-11s | %s | %5.1f%% | %8s | %9s (%9s) ↓ | %8s | %6s | %d | %9s",
-		d.state.String(),
+		d.state,
 		d.info.Hash,
 		float64(completed*1000/d.info.TotalLength)/10,
 		humanize.IBytes(uint64(d.info.TotalLength)),

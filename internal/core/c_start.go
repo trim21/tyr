@@ -58,7 +58,7 @@ func (c *Client) Start() error {
 	//		c.m.RLock()
 	//		for _, d := range c.downloads {
 	//			d.m.RLock()
-	//			if !(d.state == Seeding || d.state == Downloading) {
+	//			if !(d.state == Uploading || d.state == Downloading) {
 	//				d.m.RUnlock()
 	//				continue
 	//			}

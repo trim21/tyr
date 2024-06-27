@@ -12,6 +12,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/anacrolix/torrent/metainfo"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/samber/lo"
@@ -21,6 +22,7 @@ import (
 
 	"tyr/internal/config"
 	"tyr/internal/core"
+	"tyr/internal/meta"
 	"tyr/internal/pkg/empty"
 	"tyr/internal/pkg/random"
 	_ "tyr/internal/platform" // deny compile on unsupported platform
@@ -118,22 +120,21 @@ func main() {
 	//	m := lo.Must(metainfo.LoadFromFile(`C:\Users\Trim21\Downloads\ubuntu-24.04-desktop-amd64.iso.torrent.patched`))
 	//	lo.Must0(app.AddTorrent(m, lo.Must(meta.FromTorrent(*m)), "D:\\Downloads\\ubuntu", nil))
 	//}
-	//
-	//{
-	//	m := lo.Must(metainfo.LoadFromFile(`C:\Users\Trim21\Downloads\qwer.torrent`))
-	//	lo.Must0(app.AddTorrent(m, lo.Must(meta.FromTorrent(*m)), "D:\\Downloads\\qwer", nil))
-	//}
+
+	{
+		m := lo.Must(metainfo.LoadFromFile(`C:\Users\Trim21\Downloads\qwer.torrent`))
+		lo.Must0(app.AddTorrent(m, lo.Must(meta.FromTorrent(*m)), "D:\\Downloads\\qwer", nil))
+	}
 
 	var done = make(chan empty.Empty)
 
 	go func() {
 		server := web.New(app, webToken, debug)
 		fmt.Println("start", "http://"+address)
-		err = http.ListenAndServe(address, server)
-		done <- empty.Empty{}
-		if err != nil {
-			panic(err)
+		if err := http.ListenAndServe(address, server); err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, err)
 		}
+		done <- empty.Empty{}
 	}()
 
 	signalChan := make(chan os.Signal, 1)

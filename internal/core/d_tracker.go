@@ -13,7 +13,6 @@ import (
 
 	"github.com/anacrolix/generics/heap"
 	"github.com/anacrolix/torrent/metainfo"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/go-resty/resty/v2"
 	"github.com/rs/zerolog/log"
 	"github.com/samber/lo"
@@ -203,7 +202,6 @@ func (t *Tracker) announce(d *Download, event string) (AnnounceResult, error) {
 
 	var m map[string]any
 	fmt.Println(bencode.DecodeBytes(res.Body(), &m))
-	spew.Dump(lo.Keys(m))
 
 	//fmt.Println("t" res.String())
 
