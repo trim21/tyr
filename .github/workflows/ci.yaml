@@ -55,7 +55,5 @@ jobs:
 
       - run: go build -o tmp/try.exe
       - run: ./tmp/try.exe --help
-      - run: go build -tags assert -o tmp/try.exe
-      - run: ./tmp/try.exe --help
-      - run: go build -tags release -o tmp/try.exe
+      - run: go build '-tags=${{ matrix.tag }}' -o tmp/try.exe
       - run: ./tmp/try.exe --help
