@@ -7,6 +7,7 @@
 package flowrate
 
 import (
+	"io"
 	"math"
 	"sync"
 	"time"
@@ -77,6 +78,22 @@ func (m *Monitor) Update(n int) int {
 // execution. It calls m.Update(n) and then returns (n, err) unmodified.
 func (m *Monitor) IO(n int, err error) (int, error) {
 	return m.Update(n), err
+}
+
+type wrappedReader struct {
+	r io.Reader
+	m *Monitor
+}
+
+func (w wrappedReader) Read(p []byte) (n int, err error) {
+	return w.m.IO(w.r.Read(p))
+}
+
+func (m *Monitor) WrapReader(r io.Reader) io.Reader {
+	return &wrappedReader{
+		r: r,
+		m: m,
+	}
 }
 
 // IO64 is just like IO, but accept int64

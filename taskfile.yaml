@@ -87,3 +87,6 @@ tasks:
   trace:
     cmds:
       - curl http://127.0.0.1:8002/debug/pprof/trace?seconds=5 > trace.out
+
+  i18n:extract:
+    cmd: goi18n extract

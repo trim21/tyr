@@ -76,6 +76,7 @@ func New(c *core.Client, token string, enableDebug bool) http.Handler {
 
 	AddTorrent(h, c)
 	GetTorrent(h, c)
+	MoveTorrent(h, c)
 
 	var auth = func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

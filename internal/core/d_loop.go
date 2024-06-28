@@ -87,8 +87,10 @@ func (d *Download) startBackground() {
 
 	go func() {
 		for {
-			if d.ctx.Err() != nil {
+			select {
+			case <-d.ctx.Done():
 				return
+			default:
 			}
 
 			d.m.Lock()
@@ -112,9 +114,12 @@ func (d *Download) startBackground() {
 	}()
 
 	for {
-		if d.ctx.Err() != nil {
+		select {
+		case <-d.ctx.Done():
 			return
+		default:
 		}
+
 		d.m.Lock()
 		if d.state == Stopped {
 			d.log.Trace().Msg("paused, waiting")

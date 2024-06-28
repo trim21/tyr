@@ -113,3 +113,34 @@ func GetTorrent(h *jsonrpc.Handler, c *core.Client) {
 	u.SetName("torrent.get")
 	h.Add(u)
 }
+
+type MoveTorrentRequest struct {
+	InfoHash       string `json:"info_hash" description:"torrent file hash" required:"true"`
+	TargetBasePath string `json:"target_base_path" required:"true"`
+}
+
+type MoveTorrentResponse struct {
+	//Name string   `json:"name" required:"true"`
+	//Tags []string `json:"tags"`
+}
+
+func MoveTorrent(h *jsonrpc.Handler, c *core.Client) {
+	u := usecase.NewInteractor[*MoveTorrentRequest, MoveTorrentResponse](
+		func(ctx context.Context, req *MoveTorrentRequest, res *MoveTorrentResponse) error {
+			ih, err := hex.DecodeString(req.InfoHash)
+			if err != nil || len(ih) != 20 {
+				return CodeError(1, errgo.Wrap(err, "invalid info_hash"))
+			}
+
+			err = c.ScheduleMove(meta.Hash(ih), req.TargetBasePath)
+			if err != nil {
+				return CodeError(2, errgo.Wrap(err, "failed to schedule move"))
+			}
+
+			return nil
+		},
+	)
+
+	u.SetName("torrent.move")
+	h.Add(u)
+}

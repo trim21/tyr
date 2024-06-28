@@ -93,6 +93,22 @@ type fileOpenCache struct {
 	borrowed bool
 }
 
+var ErrTorrentNotFound = errors.New("torrent not found")
+
+func (c *Client) ScheduleMove(ih meta.Hash, targetBasePath string) error {
+	c.m.RLock()
+	d, ok := c.downloadMap[ih]
+	c.m.RUnlock()
+
+	if !ok {
+		return ErrTorrentNotFound
+	}
+
+	err := d.Move(targetBasePath)
+
+	return err
+}
+
 func (c *Client) NewDownload(m *metainfo.MetaInfo, info meta.Info, basePath string, tags []string) *Download {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -161,10 +177,6 @@ func (c *Client) NewDownload(m *metainfo.MetaInfo, info meta.Info, basePath stri
 	return d
 }
 
-func (d *Download) Move(target string) error {
-	return errors.New("not implemented")
-}
-
 func (d *Download) Display() string {
 	buf := bytebufferpool.Get()
 	defer bytebufferpool.Put(buf)
@@ -211,6 +223,10 @@ func (d *Download) Display() string {
 		d.conn.Size(),
 		humanize.IBytes(uint64(left)),
 	)
+
+	if d.err != nil {
+		_, _ = fmt.Fprintf(buf, "| %v", d.err)
+	}
 
 	for _, tier := range d.trackers {
 		for _, t := range tier.trackers {
