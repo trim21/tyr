@@ -20,7 +20,7 @@ jobs:
         os: [ubuntu, windows, macos]
         race:
           - { CGO: "0", RACE: "" }
-          - { CHO: "1", RACE: "halt_on_error=1" }
+          - { CGO: "1", RACE: "halt_on_error=1" }
     env:
       CGO_ENABLED: ${{ matrix.race.CGO }}
       GORACE: ${{ matrix.race.RACE }}
