@@ -38,7 +38,8 @@ jobs:
       - run: go mod tidy
       - run: git diff --exit-code
 
-      - run: task init
+      - run: go install gotest.tools/gotestsum@latest
+        working-directory: tools
 
       - run: gotestsum --format=github-actions --format-hide-empty-pkg -- -race -count=1 -coverprofile=coverage.txt -covermode=atomic ./...
         shell: bash
