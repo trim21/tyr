@@ -13,11 +13,12 @@ env:
 
 jobs:
   build:
-    name: "${{ matrix.os }} CGO=${{ matrix.race.CGO }}"
+    name: "${{ matrix.os }} CGO=${{ matrix.race.CGO }} tag=${{ matrix.tag }}"
     runs-on: "${{ matrix.os }}-latest"
     strategy:
       matrix:
         os: [ubuntu, windows, macos]
+        tag: ["", assert, release]
         race:
           - { CGO: "0", RACE: "" }
           - { CGO: "1", RACE: "halt_on_error=1" }
@@ -44,7 +45,7 @@ jobs:
       - run: go install gotest.tools/gotestsum@latest
         working-directory: tools
 
-      - run: gotestsum --format=pkgname --format-hide-empty-pkg -- -count=1 -coverprofile=coverage.txt -covermode=atomic ./...
+      - run: gotestsum --format=pkgname --format-hide-empty-pkg -- '-tags=${{ matrix.tag }}' -count=1 -coverprofile=coverage.txt -covermode=atomic ./...
         shell: bash
 
       - name: Upload coverage to Codecov
