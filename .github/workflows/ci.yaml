@@ -27,11 +27,19 @@ jobs:
         with:
           go-version-file: "go.mod"
 
+      - name: Install Task
+        uses: arduino/setup-task@v1
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
       # check go mod clean
       - run: go mod tidy
       - run: git diff --exit-code
 
-      - run: go test ./...
+      - run: task init
+
+      - run: gotestsum --format=testname --format-hide-empty-pkg -- -race -count=1 -coverprofile=coverage.txt -covermode=atomic ./...
 
       - run: go build -o tmp/try.exe
       - run: ./tmp/try.exe --help
