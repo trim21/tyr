@@ -48,6 +48,11 @@ jobs:
         shell: bash
         if: ${{ matrix.CGO == '0' }}
 
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+
       - run: go build -o tmp/try.exe
       - run: ./tmp/try.exe --help
       - run: go build -tags assert -o tmp/try.exe
