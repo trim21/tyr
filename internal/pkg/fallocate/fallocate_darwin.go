@@ -1,3 +1,5 @@
+//go:build darwin
+
 package fallocate
 
 import (
@@ -7,6 +9,10 @@ import (
 )
 
 func Fallocate(file *os.File, offset int64, length int64) error {
+	if length == 0 {
+		return nil
+	}
+
 	var fst syscall.Fstore_t
 
 	fst.Flags = syscall.F_ALLOCATECONTIG

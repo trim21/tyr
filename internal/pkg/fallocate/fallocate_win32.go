@@ -7,6 +7,9 @@ import (
 )
 
 func Fallocate(file *os.File, offset int64, length int64) error {
-	// go-fallocate write bytes to disk, which is unnecessary
+	if length == 0 {
+		return nil
+	}
+
 	return file.Truncate(length + offset)
 }
