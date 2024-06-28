@@ -13,7 +13,7 @@ env:
 
 jobs:
   build:
-    name: "${{ matrix.os }} CGO=${{ matrix.race.CGO }} tag=${{ matrix.tag }}"
+    name: "${{ matrix.os }} tag=${{ matrix.tag }}"
     runs-on: "${{ matrix.os }}-latest"
     strategy:
       matrix:
