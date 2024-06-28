@@ -27,10 +27,20 @@ jobs:
       GORACE: ${{ matrix.race.RACE }}
     steps:
       - uses: actions/checkout@v4
+
+      - shell: bash
+        run: |
+          mkdir -p tmp
+          bash "CGO=${{ matrix.race.CGO }} tag=${{ matrix.tag }}" > tmp/build
+
       - uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
-          cache-dependency-path: "**/go.sum"
+          # cache based on cgo and build tags
+          cache-dependency-path: |
+            tmp/build
+            go.sum
+            tools/go.sum
 
       - name: Install Task
         uses: arduino/setup-task@v2
@@ -53,7 +63,5 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
-      - run: go build -o tmp/try.exe
-      - run: ./tmp/try.exe --help
       - run: go build '-tags=${{ matrix.tag }}' -o tmp/try.exe
       - run: ./tmp/try.exe --help

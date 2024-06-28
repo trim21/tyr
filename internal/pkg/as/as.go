@@ -46,7 +46,7 @@ func Uint16[T int8 | int16 | int32 | int64 | int | uint8 | uint32 | uint64 | uin
 	return uint16(v)
 }
 
-func Uint32[T int8 | int16 | int32 | int64 | int | uint8 | uint16 | uint64 | uint](v T) (result uint32) {
+func Uint32[T int8 | int16 | int32 | int64 | int | uint8 | uint16 | uint64 | uint](v T) uint32 {
 	rv := reflect.ValueOf(v)
 	if rv.CanUint() {
 		if rU32.OverflowUint(rv.Uint()) {
@@ -59,7 +59,7 @@ func Uint32[T int8 | int16 | int32 | int64 | int | uint8 | uint16 | uint64 | uin
 	return uint32(v)
 }
 
-func Uint64[T int8 | int16 | int32 | int64 | int | uint8 | uint16 | uint32 | uint](v T) (result uint64) {
+func Uint64[T int8 | int16 | int32 | int64 | int | uint8 | uint16 | uint32 | uint](v T) uint64 {
 	rv := reflect.ValueOf(v)
 	if rv.CanInt() && rv.Int() < 0 {
 		panic(fmt.Sprintf("%d overflow uint64", v))
