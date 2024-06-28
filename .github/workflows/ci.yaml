@@ -19,11 +19,8 @@ jobs:
       matrix:
         os: [ubuntu, windows, macos]
         tag: [assert, release]
-        race:
-          - { RACE: "" }
-          - { RACE: "halt_on_error=1" }
     env:
-      GORACE: ${{ matrix.race.RACE }}
+      GORACE: "halt_on_error=1"
     steps:
       - uses: actions/checkout@v4
 
