@@ -325,6 +325,7 @@ func (p *Peer) start(skipHandshake bool) {
 		}
 
 		go func() {
+			//nolint:exhaustive
 			switch event.Event {
 			case proto.Have, proto.HaveAll, proto.Bitfield:
 				if p.Bitmap.WithAndNot(p.d.bm).Count() != 0 {

@@ -57,12 +57,11 @@ func New(cfg config.Config, sessionPath string) *Client {
 	//ips, err := util.GetLocalIpaddress(nil)
 
 	return &Client{
-		Config: cfg,
-		ctx:    ctx,
-		cancel: cancel,
-		ch:     ttlcache.New[netip.AddrPort, connHistory](),
-		//sem:    semaphore.NewWeighted(int64(cfg.App.PeersLimit)),
-		sem:         semaphore.NewWeighted(50),
+		Config:      cfg,
+		ctx:         ctx,
+		cancel:      cancel,
+		ch:          ttlcache.New[netip.AddrPort, connHistory](),
+		sem:         semaphore.NewWeighted(int64(cfg.App.GlobalConnectionLimit)),
 		checkQueue:  make([]meta.Hash, 0, 3),
 		downloadMap: make(map[meta.Hash]*Download),
 		connChan:    make(chan incomingConn, 1),
@@ -81,32 +80,32 @@ type incomingConn struct {
 }
 
 type Client struct {
-	ctx             context.Context
-	http            *resty.Client
-	cancel          context.CancelFunc
-	downloadMap     map[meta.Hash]*Download
-	mseKeys         mse.SecretKeyIter
-	connChan        chan incomingConn
-	sem             *semaphore.Weighted
-	mseSelector     mse.CryptoSelector
-	ch              *ttlcache.Cache[netip.AddrPort, connHistory]
-	fh              map[string]*os.File
-	sessionPath     string
-	infoHashes      []meta.Hash
-	downloads       []*Download
-	checkQueue      []meta.Hash
-	Config          config.Config
-	connectionCount atomic.Uint32
-	m               sync.RWMutex
-	checkQueueLock  sync.Mutex
-	fLock           sync.Mutex
-	mseDisabled     bool
+	ctx         context.Context
+	http        *resty.Client
+	cancel      context.CancelFunc
+	downloadMap map[meta.Hash]*Download
+	mseKeys     mse.SecretKeyIter
+	connChan    chan incomingConn
+	sem         *semaphore.Weighted
+	mseSelector mse.CryptoSelector
+	ch          *ttlcache.Cache[netip.AddrPort, connHistory]
+	fh          map[string]*os.File
+	sessionPath string
+	infoHashes  []meta.Hash
+	downloads   []*Download
+	checkQueue  []meta.Hash
 
 	// a random key for peer priority
 	randKey []byte
 
 	//ip4 atomic.Pointer[netip.Addr]
 	//ip6 atomic.Pointer[netip.Addr]
+	Config          config.Config
+	connectionCount atomic.Uint32
+	m               sync.RWMutex
+	checkQueueLock  sync.Mutex
+	fLock           sync.Mutex
+	mseDisabled     bool
 }
 
 func (c *Client) AddTorrent(m *metainfo.MetaInfo, info meta.Info, downloadPath string, tags []string) error {

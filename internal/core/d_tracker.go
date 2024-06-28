@@ -158,7 +158,6 @@ type trackerAnnounceResponse struct {
 }
 
 type Tracker struct {
-	sync.RWMutex
 	lastAnnounceTime time.Time
 	nextAnnounce     time.Time
 	err              error
@@ -166,6 +165,7 @@ type Tracker struct {
 	peerCount        int
 	leechers         int
 	seeders          int
+	sync.RWMutex
 }
 
 func (t *Tracker) req(d *Download) *resty.Request {

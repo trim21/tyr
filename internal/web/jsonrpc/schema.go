@@ -14,12 +14,10 @@ import (
 
 // OpenAPI extracts OpenAPI documentation from HTTP handler and underlying use case interactor.
 type OpenAPI struct {
-	mu sync.Mutex
-
-	//RequestPath string // url path to json rpc, for example "/json_rpc"
+	gen *openapi3.Reflector
 
 	BasePath string // URL path to docs, default "/docs/".
-	gen      *openapi3.Reflector
+	mu       sync.Mutex
 }
 
 // Reflector is an accessor to OpenAPI Reflector instance.

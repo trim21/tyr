@@ -29,13 +29,13 @@ const ver = "2.0"
 
 // Handler serves JSON-RPC 2.0 methods with HTTP.
 type Handler struct {
-	OpenAPI     *OpenAPI
-	Validator   *validator.Validate
+	OpenAPI   *OpenAPI
+	Validator *validator.Validate
+
+	methods     map[string]method
 	Middlewares []usecase.Middleware
 
 	SkipParamsValidation bool
-
-	methods map[string]method
 }
 
 type method struct {
@@ -45,9 +45,9 @@ type method struct {
 	useCase usecase.Interactor
 
 	inputBufferType reflect.Type
-	inputIsPtr      bool
 
 	outputBufferType reflect.Type
+	inputIsPtr       bool
 }
 
 func (h *method) setupInputBuffer() {
@@ -142,9 +142,9 @@ type Response struct {
 
 // Error describes JSON-RPC error structure.
 type Error struct {
-	Code    ErrorCode `json:"code"`
-	Message string    `json:"message"`
 	Data    any       `json:"data,omitempty"`
+	Message string    `json:"message"`
+	Code    ErrorCode `json:"code"`
 }
 
 var errEmptyBody = errors.New("empty body")

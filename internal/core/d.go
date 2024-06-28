@@ -211,17 +211,15 @@ func (d *Download) Display() string {
 		}
 	}
 
-	_, _ = fmt.Fprintf(buf, "%-11s | %s | %5.1f%% | %8s | %9s (%9s) ↓ | %8s | %6s | %d | %9s",
+	_, _ = fmt.Fprintf(buf, "%-11s | %s | %5.1f%% | %8s | %8s | %10s ↓ | %6s | %d",
 		d.state,
 		d.info.Hash,
 		float64(completed*1000/d.info.TotalLength)/10,
 		humanize.IBytes(uint64(d.info.TotalLength)),
-		humanize.IBytes(uint64(d.downloaded.Load())),
-		rate.RateString(),
 		humanize.IBytes(uint64(left)),
+		rate.RateString(),
 		eta,
 		d.conn.Size(),
-		humanize.IBytes(uint64(left)),
 	)
 
 	if d.err != nil {

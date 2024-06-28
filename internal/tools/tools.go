@@ -2,4 +2,8 @@
 
 package tooos
 
-import _ "golang.org/x/tools/cmd/stringer"
+import (
+	_ "github.com/dkorunic/betteralign/cmd/betteralign"
+	_ "golang.org/x/tools/cmd/stringer"
+	_ "gotest.tools/gotestsum"
+)

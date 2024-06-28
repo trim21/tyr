@@ -2,10 +2,10 @@ package core
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 
-	"github.com/docker/go-units"
 	"github.com/karrick/godirwalk"
 
 	"tyr/internal/pkg/gfs"
@@ -55,12 +55,10 @@ func (d *Download) move(ctx context.Context, target string) error {
 		_ = os.Remove(filepath.Join(originalBasePath, file.Path))
 	}
 
-	_, _ = pruneEmptyDirectories(originalBasePath)
+	_ = pruneEmptyDirectories(originalBasePath)
 
 	return nil
 }
-
-const copyBufferSize = units.MiB * 4
 
 func (d *Download) moveFile(ctx context.Context, target string, index uint32) error {
 	file := d.info.Files[index]
@@ -79,9 +77,7 @@ func (d *Download) moveFile(ctx context.Context, target string, index uint32) er
 	return gfs.SmartCopy(ctx, sourcePath, targetPath, d.ioDown)
 }
 
-func pruneEmptyDirectories(osDirname string) (int, error) {
-	var count int
-
+func pruneEmptyDirectories(osDirname string) error {
 	err := godirwalk.Walk(osDirname, &godirwalk.Options{
 		Unsorted: true,
 		Callback: func(_ string, _ *godirwalk.Dirent) error {
@@ -89,6 +85,8 @@ func pruneEmptyDirectories(osDirname string) (int, error) {
 			return nil
 		},
 		PostChildrenCallback: func(osPathname string, _ *godirwalk.Dirent) error {
+			fmt.Println(osPathname)
+
 			s, err := godirwalk.NewScanner(osPathname)
 			if err != nil {
 				return err
@@ -107,13 +105,9 @@ func pruneEmptyDirectories(osDirname string) (int, error) {
 				return nil // do not remove directory with at least one child
 			}
 
-			err = os.Remove(osPathname)
-			if err == nil {
-				count++
-			}
-			return err
+			return os.Remove(osPathname)
 		},
 	})
 
-	return count, err
+	return err
 }

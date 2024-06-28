@@ -11,13 +11,14 @@ import (
 )
 
 type Application struct {
-	DownloadDir     string      `json:"download-dir"`
-	Crypto          string      `json:"crypto"`
-	MaxHTTPParallel int         `json:"max-http-parallel"`
-	P2PPort         uint16      `json:"p2p-port"`
-	NumWant         uint16      `json:"num-want"`
-	PeersLimit      uint16      `json:"peers-limit"`
-	Fallocate       atomic.Bool `json:"fallocate"`
+	DownloadDir     string `json:"download-dir"`
+	Crypto          string `json:"crypto"`
+	MaxHTTPParallel int    `json:"max-http-parallel"`
+	P2PPort         uint16 `json:"p2p-port"`
+	NumWant         uint16 `json:"num-want"`
+	// hard global connection limit
+	GlobalConnectionLimit uint16      `json:"global-connections-limit"`
+	Fallocate             atomic.Bool `json:"fallocate"`
 }
 
 type Config struct {
@@ -26,7 +27,7 @@ type Config struct {
 
 func LoadFromFile(path string) (Config, error) {
 	var cfg = Config{
-		App: Application{MaxHTTPParallel: 100, PeersLimit: 50},
+		App: Application{MaxHTTPParallel: 100, GlobalConnectionLimit: 50},
 	}
 
 	if _, err := toml.DecodeFile(path, &cfg); err != nil && !os.IsNotExist(err) {

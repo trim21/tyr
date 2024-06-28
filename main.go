@@ -122,8 +122,8 @@ func main() {
 	//}
 
 	{
-		m := lo.Must(metainfo.LoadFromFile(`C:\Users\Trim21\Downloads\qwer.torrent`))
-		lo.Must0(app.AddTorrent(m, lo.Must(meta.FromTorrent(*m)), "D:\\Downloads\\qwer", nil))
+		m := lo.Must(metainfo.LoadFromFile(`C:\Users\Trim21\Downloads\2.torrent`))
+		lo.Must0(app.AddTorrent(m, lo.Must(meta.FromTorrent(*m)), "D:\\Downloads\\2", nil))
 	}
 
 	var done = make(chan empty.Empty)
