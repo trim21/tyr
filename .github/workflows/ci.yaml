@@ -18,7 +18,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu, windows, macos]
-        tag: ["", assert, release]
+        tag: [assert, release]
         race:
           - { CGO: "0", RACE: "" }
           - { CGO: "1", RACE: "halt_on_error=1" }
@@ -29,16 +29,14 @@ jobs:
       - uses: actions/checkout@v4
 
       - shell: bash
-        run: |
-          mkdir -p tmp
-          echo "CGO=${{ matrix.race.CGO }} tag=${{ matrix.tag }}" > tmp/build
+        # so we can cache based on cgo and build tags
+        run: echo "CGO=${{ matrix.race.CGO }} tag=${{ matrix.tag }}" > env.txt
 
       - uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
-          # cache based on cgo and build tags
           cache-dependency-path: |
-            tmp/build
+            env.txt
             go.sum
             tools/go.sum
 
