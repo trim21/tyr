@@ -20,17 +20,16 @@ jobs:
         os: [ubuntu, windows, macos]
         tag: [assert, release]
         race:
-          - { CGO: "0", RACE: "" }
-          - { CGO: "1", RACE: "halt_on_error=1" }
+          - { RACE: "" }
+          - { RACE: "halt_on_error=1" }
     env:
-      CGO_ENABLED: ${{ matrix.race.CGO }}
       GORACE: ${{ matrix.race.RACE }}
     steps:
       - uses: actions/checkout@v4
 
       - shell: bash
         # so we can cache based on cgo and build tags
-        run: echo "CGO=${{ matrix.race.CGO }} tag=${{ matrix.tag }}" > env.txt
+        run: echo "tag=${{ matrix.tag }}" > env.txt
 
       - uses: actions/setup-go@v5
         with:
