@@ -1,6 +1,6 @@
 //go:build tools
 
-package tooos
+package tools
 
 import (
 	_ "github.com/dkorunic/betteralign/cmd/betteralign"
