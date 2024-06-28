@@ -41,9 +41,11 @@ jobs:
       - run: task init
 
       - run: gotestsum --format=github-actions --format-hide-empty-pkg -- -race -count=1 -coverprofile=coverage.txt -covermode=atomic ./...
+        shell: bash
         if: ${{ matrix.CGO == '1' }}
 
       - run: gotestsum --format=github-actions --format-hide-empty-pkg -- -count=1 -coverprofile=coverage.txt -covermode=atomic ./...
+        shell: bash
         if: ${{ matrix.CGO == '0' }}
 
       - run: go build -o tmp/try.exe
