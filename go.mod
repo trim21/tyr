@@ -23,7 +23,7 @@ require (
 	github.com/panjf2000/ants/v2 v2.10.0
 	github.com/puzpuzpuz/xsync/v3 v3.2.0
 	github.com/rs/zerolog v1.33.0
-	github.com/samber/lo v1.42.0
+	github.com/samber/lo v1.44.0
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.19.0
