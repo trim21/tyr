@@ -35,8 +35,8 @@ packages:
   '@redocly/ajv@8.11.0':
     resolution: {integrity: sha512-9GWx27t7xWhDIR02PA18nzBdLcKQRgc46xNQvjFkrYk4UOmvKhJ/dawwiX0cCOeetN5LcaaiqQbVOWYK62SGHw==}
 
-  '@redocly/config@0.6.1':
-    resolution: {integrity: sha512-p4mlj+CD3Byec3wOxDlDln0B0gOcNvEkpl4jn3/e9y8h11ogzXnWxnlJAtE5Kcr1ByujS/7Mbt01df9z1xfMbg==}
+  '@redocly/config@0.6.2':
+    resolution: {integrity: sha512-c3K5u64eMnr2ootPcpEI0ioIRLE8QP8ptvLxG9MwAmb2sU8HMRfVwXDU3AZiMVY2w4Ts0mDc+Xv4HTIk8DRqFw==}
 
   '@redocly/openapi-core@1.16.0':
     resolution: {integrity: sha512-z06h+svyqbUcdAaePq8LPSwTPlm6Ig7j2VlL8skPBYnJvyaQ2IN7x/JkOvRL4ta+wcOCBdAex5JWnZbKaNktJg==}
@@ -99,8 +99,8 @@ packages:
     resolution: {integrity: sha512-sKJf1+ceQBr4SMkvQnBDNDtf4TXpVhVGateu0t918bl30FnbE2m4vNLX+VWe/dpjlb+HugGYzW7uQXH98HPEYw==}
     engines: {node: '>=4'}
 
-  https-proxy-agent@7.0.4:
-    resolution: {integrity: sha512-wlwpilI7YdjSkWaQ/7omYBMTliDcmCN8OLihO6I9B86g06lMyAoqgoDpV0XqoaPOKj+0DIdAvnsWfyAAhmimcg==}
+  https-proxy-agent@7.0.5:
+    resolution: {integrity: sha512-1e4Wqeblerz+tMKPIq2EMGiiWW1dIjZOksyHWSUm1rmuvw/how9hBHZ38lAGj5ID4Ik6EdkOw7NmWPy6LAwalw==}
     engines: {node: '>= 14'}
 
   index-to-position@0.1.2:
@@ -227,14 +227,14 @@ snapshots:
       require-from-string: 2.0.2
       uri-js: 4.4.1
 
-  '@redocly/config@0.6.1': {}
+  '@redocly/config@0.6.2': {}
 
   '@redocly/openapi-core@1.16.0(supports-color@9.4.0)':
     dependencies:
       '@redocly/ajv': 8.11.0
-      '@redocly/config': 0.6.1
+      '@redocly/config': 0.6.2
       colorette: 1.4.0
-      https-proxy-agent: 7.0.4(supports-color@9.4.0)
+      https-proxy-agent: 7.0.5(supports-color@9.4.0)
       js-levenshtein: 1.1.6
       js-yaml: 4.1.0
       lodash.isequal: 4.5.0
@@ -296,7 +296,7 @@ snapshots:
 
   has-flag@3.0.0: {}
 
-  https-proxy-agent@7.0.4(supports-color@9.4.0):
+  https-proxy-agent@7.0.5(supports-color@9.4.0):
     dependencies:
       agent-base: 7.1.1(supports-color@9.4.0)
       debug: 4.3.5(supports-color@9.4.0)
