@@ -26,7 +26,7 @@ jobs:
 
       - shell: bash
         # so we can cache based on cgo and build tags
-        run: echo "tag=${{ matrix.tag }}" > env.txt
+        run: echo "v=1;tag=${{ matrix.tag }}" > env.txt
 
       - uses: actions/setup-go@v5
         with:
