@@ -3,10 +3,12 @@ package core
 import (
 	"crypto/sha1"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
+	"time"
 
+	"github.com/docker/go-units"
+	"github.com/juju/ratelimit"
 	"github.com/negrel/assert"
 	"github.com/trim21/errgo"
 
@@ -21,12 +23,12 @@ type existingFile struct {
 }
 
 func (d *Download) initCheck() error {
-	d.log.Debug().Msg("initCheck download task")
-	err := os.MkdirAll(d.basePath, os.ModePerm)
-	if err != nil {
+	d.log.Debug().Msg("initCheck")
+	if err := os.MkdirAll(d.basePath, os.ModePerm); err != nil {
 		return err
 	}
 
+	d.log.Debug().Msg("try pre alloc")
 	var efs = make(map[int]*existingFile, len(d.info.Files)+1)
 	for i, tf := range d.info.Files {
 		p := tf.Path
@@ -44,56 +46,45 @@ func (d *Download) initCheck() error {
 		return nil
 	}
 
-	var fileSeekCache = make(map[int]int64, len(d.info.Files))
-	var fileOpenCaches = make(map[int]*os.File, len(d.info.Files))
-	defer func() {
-		for _, file := range fileOpenCaches {
-			_ = file.Close()
-		}
-	}()
+	d.log.Debug().Msg("start checking")
 
-	//bucket := ratelimit.NewBucketWithQuantum(time.Second/10, units.MiB*500, units.MiB*50)
+	//buf := mempool.Get()
+	//defer mempool.Put(buf)
+	//
+	//if cap(buf.B) < int(d.info.PieceLength) {
+	//	buf.B = make([]byte, d.info.PieceLength)
+	//}
 
-	// `len(buf.B)` is always 0, and `cap(buf.B)` is always PieceLength
-	// we use `size` to keep trace length of `buf.B`
-	var size int64
-	for _, index := range h {
-		size = 0
-		piece := d.pieceInfo[index]
-		sum := sha1.New()
+	bucket := ratelimit.NewBucketWithQuantum(time.Second/10, units.MiB*50, units.MiB*50)
+
+	sum := sha1.New()
+	for _, pieceIndex := range h {
+		piece := d.pieceInfo[pieceIndex]
 		for _, chunk := range piece.fileChunks {
-			f, ok := fileOpenCaches[chunk.fileIndex]
-			fp := filepath.Join(d.basePath, d.info.Files[chunk.fileIndex].Path)
-			if !ok {
-				f, err = os.Open(fp)
-				if err != nil {
-					return errgo.Wrap(err, fmt.Sprintf("failed to open file %s", fp))
-				}
-				fileOpenCaches[chunk.fileIndex] = f
+			select {
+			case <-d.ctx.Done():
+				return d.ctx.Err()
+			default:
 			}
 
-			if fileSeekCache[chunk.fileIndex] != chunk.offsetOfFile {
-				_, err = f.Seek(chunk.offsetOfFile, io.SeekStart)
-				if err != nil {
-					return errgo.Wrap(err, fmt.Sprintf("failed to read file %s", fp))
-				}
-			}
-
-			//_, err = d.ioDown.IO(io.ReadFull(f, buf.B[size:size+chunk.length]))
-			_, err = d.ioDown.IO64(io.CopyN(sum, gfs.NewReader(d.ctx, f), chunk.length))
+			f, err := d.openFileWithCache(chunk.fileIndex)
 			if err != nil {
-				return errgo.Wrap(err, fmt.Sprintf("failed to read file %s", fp))
+				return errgo.Wrap(err, fmt.Sprintf("failed to open file %q", filepath.Join(d.basePath, d.info.Files[chunk.fileIndex].Path)))
 			}
-			size += chunk.length
 
-			//bucket.Wait(chunk.length)
+			bucket.Wait(chunk.length)
 
-			fileSeekCache[chunk.fileIndex] = chunk.offsetOfFile + chunk.length
+			_, err = d.ioDown.IO64(gfs.CopyReaderAt(sum, f.File, chunk.offsetOfFile, chunk.length))
+			if err != nil {
+				return errgo.Wrap(err, fmt.Sprintf("failed to read file %s", f.File.Name()))
+			}
 		}
 
-		if [sha1.Size]byte(sum.Sum(nil)) == d.info.Pieces[index] {
-			d.bm.Set(index)
+		if [sha1.Size]byte(sum.Sum(nil)) == d.info.Pieces[pieceIndex] {
+			d.bm.Set(pieceIndex)
 		}
+
+		sum.Reset()
 	}
 
 	return nil

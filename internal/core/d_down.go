@@ -9,8 +9,8 @@ import (
 
 	"github.com/docker/go-units"
 
-	"tyr/internal/pkg/bufpool"
 	"tyr/internal/pkg/global/tasks"
+	"tyr/internal/pkg/mempool"
 	"tyr/internal/proto"
 )
 
@@ -74,7 +74,7 @@ func (d *Download) handleRes(res proto.ChunkResponse) {
 }
 
 func (d *Download) writePieceToDisk(pieceIndex uint32, chunks []*proto.ChunkResponse) error {
-	buf := bufpool.Get()
+	buf := mempool.Get()
 
 	for _, chunk := range chunks {
 		buf.Write(chunk.Data)
@@ -84,12 +84,12 @@ func (d *Download) writePieceToDisk(pieceIndex uint32, chunks []*proto.ChunkResp
 	if h != d.info.Pieces[pieceIndex] {
 		d.corrupted.Add(d.info.PieceLength)
 		fmt.Println("data mismatch", pieceIndex)
-		bufpool.Put(buf)
+		mempool.Put(buf)
 		return nil
 	}
 
 	tasks.Submit(func() {
-		defer bufpool.Put(buf)
+		defer mempool.Put(buf)
 		pieces := d.pieceInfo[pieceIndex]
 		var offset int64 = 0
 

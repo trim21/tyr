@@ -321,5 +321,6 @@ type peerWithPriority struct {
 }
 
 func (p peerWithPriority) Less(o peerWithPriority) bool {
-	return p.priority < o.priority
+	// reversed order, so higher priority get handled first
+	return p.priority > o.priority
 }

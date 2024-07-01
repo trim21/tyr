@@ -22,10 +22,10 @@ import (
 
 	"tyr/internal/meta"
 	"tyr/internal/pkg/bm"
-	"tyr/internal/pkg/bufpool"
 	"tyr/internal/pkg/flowrate"
 	"tyr/internal/pkg/global"
 	"tyr/internal/pkg/heap"
+	"tyr/internal/pkg/mempool"
 	"tyr/internal/proto"
 )
 
@@ -59,6 +59,7 @@ type Download struct {
 	peers             *heap.Heap[peerWithPriority]
 	fileOpenMutex     *sync.Cond
 	fileOpenCache     map[int]*fileOpenCache
+	m                 sync.RWMutex
 	basePath          string
 	key               string
 	downloadDir       string
@@ -80,9 +81,8 @@ type Download struct {
 	seq               atomic.Bool
 	announcePending   atomic.Bool
 	pdMutex           sync.RWMutex
-	m                 sync.RWMutex
-	peersMutex        sync.Mutex
 	connMutex         sync.RWMutex
+	peersMutex        sync.Mutex
 	peerID            PeerID
 	state             State
 	private           bool
@@ -153,7 +153,10 @@ func (c *Client) NewDownload(m *metainfo.MetaInfo, info meta.Info, basePath stri
 		fileOpenCache: make(map[int]*fileOpenCache),
 	}
 
+	d.cond = sync.NewCond(&d.m)
+
 	if global.Dev {
+		d.seq.Store(true)
 		d.peersMutex.Lock()
 		d.peers.Push(peerWithPriority{
 			addrPort: netip.MustParseAddrPort("192.168.1.3:50025"),
@@ -162,12 +165,7 @@ func (c *Client) NewDownload(m *metainfo.MetaInfo, info meta.Info, basePath stri
 		d.peersMutex.Unlock()
 		//	piece := lo.Must(lo.Last(d.pieceChunks))
 		//	assert.LessOrEqual(piece[len(piece)-1].Length, uint32(defaultBlockSize))
-	}
-
-	d.seq.Store(true)
-	d.cond = sync.NewCond(&d.m)
-
-	if !global.Dev {
+	} else {
 		d.setAnnounceList(m)
 	}
 
@@ -180,8 +178,8 @@ func (c *Client) NewDownload(m *metainfo.MetaInfo, info meta.Info, basePath stri
 }
 
 func (d *Download) Display() string {
-	buf := bufpool.Get()
-	defer bufpool.Put(buf)
+	buf := mempool.Get()
+	defer mempool.Put(buf)
 
 	d.m.RLock()
 	defer d.m.RUnlock()

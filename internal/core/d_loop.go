@@ -164,16 +164,6 @@ func (d *Download) backgroundResHandler() {
 	}
 }
 
-func (d *Download) giveBackFileCache(f *fileOpenCache) {
-	d.fileOpenMutex.L.Lock()
-	defer d.fileOpenMutex.L.Unlock()
-
-	f.borrowed = false
-	d.fileOpenCache[f.index] = f
-
-	d.fileOpenMutex.Broadcast()
-}
-
 func (d *Download) openFileWithCache(fileIndex int) (*filepool.File, error) {
 	p := filepath.Join(d.basePath, d.info.Files[fileIndex].Path)
 	err := os.MkdirAll(filepath.Dir(p), os.ModePerm)

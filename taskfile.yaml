@@ -50,7 +50,7 @@ tasks:
 
   build:dev:
     generates:
-      - dist/tmp/tmp.exe
+      - dist/dev/server.exe
     sources:
       - go.mod
       - go.sum
@@ -58,13 +58,12 @@ tasks:
     cmds:
       - task: binary
         vars:
-          TAG: release
-          OUT_PATH: dist/tyr.exe
+          TAG: assert
+          OUT_PATH: dist/dev/tmp.exe
           EXTRA_FLAGS: -race
-      - cp dist/tmp/tmp.exe dist/tmp/server.exe
+      - cp dist/dev/tmp.exe dist/dev/server.exe
 
   dev:
-    watch: true
     deps:
       - build:dev
     generates:
@@ -77,7 +76,7 @@ tasks:
     dotenv:
       - .env
     cmds:
-      - dist/tmp/server.exe --debug --web 127.0.0.1:8002 --config-file ./config.toml
+      - dist/dev/server.exe --debug --web 127.0.0.1:8002 --config-file ./config.toml
 
   dev:release:
     deps:

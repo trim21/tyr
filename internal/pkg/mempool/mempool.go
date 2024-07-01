@@ -1,4 +1,4 @@
-package bufpool
+package mempool
 
 import (
 	"github.com/valyala/bytebufferpool"

@@ -8,6 +8,7 @@ require (
 	github.com/BurntSushi/toml v1.4.0
 	github.com/RoaringBitmap/roaring/v2 v2.3.0
 	github.com/anacrolix/torrent v1.56.1
+	github.com/colega/zeropool v0.0.0-20230505084239-6fb4a4f75381
 	github.com/dchest/uniuri v1.2.0
 	github.com/docker/go-units v0.5.0
 	github.com/dustin/go-humanize v1.0.1
@@ -17,6 +18,7 @@ require (
 	github.com/go-resty/resty/v2 v2.13.1
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/jellydator/ttlcache/v3 v3.2.0
+	github.com/juju/ratelimit v1.0.2
 	github.com/karrick/godirwalk v1.17.0
 	github.com/negrel/assert v0.2.0
 	github.com/panjf2000/ants/v2 v2.10.0
