@@ -24,7 +24,7 @@ jobs:
       - run: go install golang.org/x/vuln/cmd/govulncheck@latest
         working-directory: tools
 
-      - run: govulncheck -tag release ./...
+      - run: govulncheck -tags release ./...
 
   analyze:
     name: Analyze (${{ matrix.language }})
