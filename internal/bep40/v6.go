@@ -1,5 +1,3 @@
-//go:build bep40_spec
-
 package bep40
 
 import (
@@ -19,7 +17,7 @@ func maskV6(s [16]byte, size int) [16]byte {
 	return masked
 }
 
-func PriorityBytes6(a, b netip.AddrPort) []byte {
+func priorityBytes6(a, b netip.AddrPort) []byte {
 	if a.Addr() == b.Addr() {
 		return portBytes(a.Port(), b.Port())
 	}
@@ -50,7 +48,7 @@ func PriorityBytes6(a, b netip.AddrPort) []byte {
 }
 
 func Priority6(client, peer netip.AddrPort) uint32 {
-	bs := PriorityBytes6(client, peer)
+	bs := priorityBytes6(client, peer)
 
 	return crc32c.Sum(bs)
 }

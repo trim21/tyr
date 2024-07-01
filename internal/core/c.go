@@ -19,6 +19,7 @@ import (
 	"go.uber.org/atomic"
 	"golang.org/x/sync/semaphore"
 
+	"tyr/internal/bep40"
 	"tyr/internal/config"
 	"tyr/internal/meta"
 	imse "tyr/internal/mse"
@@ -26,6 +27,8 @@ import (
 	"tyr/internal/pkg/global/tasks"
 	"tyr/internal/pkg/gslice"
 	"tyr/internal/pkg/random"
+	"tyr/internal/pkg/unsafe"
+	"tyr/internal/util"
 )
 
 func New(cfg config.Config, sessionPath string) *Client {
@@ -54,7 +57,7 @@ func New(cfg config.Config, sessionPath string) *Client {
 		panic(fmt.Sprintf("invalid `application.crypto` config %q, only 'prefer'(default) 'prefer-not', 'disable' or 'force' are allowed", cfg.App.Crypto))
 	}
 
-	//ips, err := util.GetLocalIpaddress(nil)
+	v4, v6, _ := util.GetIpAddress()
 
 	return &Client{
 		Config:      cfg,
@@ -71,6 +74,8 @@ func New(cfg config.Config, sessionPath string) *Client {
 		sessionPath: sessionPath,
 		fh:          make(map[string]*os.File),
 		randKey:     random.Bytes(32),
+		v4Addr:      *atomic.NewPointer(v4),
+		v6Addr:      *atomic.NewPointer(v6),
 	}
 }
 
@@ -90,12 +95,14 @@ type Client struct {
 	mseSelector mse.CryptoSelector
 	ch          *ttlcache.Cache[netip.AddrPort, connHistory]
 	fh          map[string]*os.File
+	v4Addr      atomic.Pointer[netip.Addr]
+	v6Addr      atomic.Pointer[netip.Addr]
 	sessionPath string
 	infoHashes  []meta.Hash
 	downloads   []*Download
 	checkQueue  []meta.Hash
 
-	// a random key for peer priority
+	// a random key for addrPort priority
 	randKey []byte
 
 	//ip4 atomic.Pointer[netip.Addr]
@@ -166,20 +173,24 @@ func (c *Client) checkComplete(d *Download) {
 	c.checkQueue = gslice.Remove(c.checkQueue, d.info.Hash)
 }
 
-func (c *Client) OpenFile(p string) (*os.File, error) {
-	c.fLock.Lock()
-	defer c.fLock.Unlock()
+func (c *Client) PeerPriority(peer netip.AddrPort) uint32 {
+	if peer.Addr().Is4() {
+		localV4 := c.v4Addr.Load()
+		if localV4 == nil {
+			return bep40.SimplePriority(c.randKey, unsafe.Bytes(peer.String()))
+		}
 
-	if f, ok := c.fh[p]; ok {
-		return f, nil
+		return bep40.Priority4(netip.AddrPortFrom(*localV4, c.Config.App.P2PPort), peer)
 	}
 
-	f, err := os.OpenFile(p, os.O_RDWR+os.O_CREATE, os.ModePerm)
-	if err != nil {
-		return nil, err
+	if peer.Addr().Is6() {
+		localV6 := c.v6Addr.Load()
+		if localV6 == nil {
+			return bep40.SimplePriority(c.randKey, unsafe.Bytes(peer.String()))
+		}
+
+		return bep40.Priority6(netip.AddrPortFrom(*localV6, c.Config.App.P2PPort), peer)
 	}
 
-	c.fh[p] = f
-
-	return f, nil
+	panic(fmt.Sprintf("unexpected addrPort address format %+v", peer))
 }

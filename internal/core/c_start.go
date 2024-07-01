@@ -27,9 +27,9 @@ func (c *Client) Start() error {
 		go func() {
 			for {
 				time.Sleep(time.Second * 5)
-				fmt.Printf("goroutine count %v connection count %v\n", runtime.NumGoroutine(), c.connectionCount.Load())
+				fmt.Printf("\n\ngoroutine count %v connection count %v\n", runtime.NumGoroutine(), c.connectionCount.Load())
+				fmt.Printf(" %10s | %20s%-20s | percent |    total |     done |      speed   |   ETA | conns\n", "state", "", "info hash")
 				c.m.RLock()
-				fmt.Println("show downloads")
 				for _, d := range c.downloads {
 					fmt.Println(d.Display())
 				}
@@ -52,7 +52,7 @@ func (c *Client) Start() error {
 	}()
 
 	//go func() {
-	//	log.Info().Msgf("using peer id prefix '%s'", global.PeerIDPrefix)
+	//	log.Info().Msgf("using addrPort id prefix '%s'", global.PeerIDPrefix)
 	//	for {
 	//		time.Sleep(time.Second)
 	//		c.m.RLock()

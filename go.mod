@@ -7,7 +7,6 @@ toolchain go1.22.4
 require (
 	github.com/BurntSushi/toml v1.4.0
 	github.com/RoaringBitmap/roaring/v2 v2.3.0
-	github.com/anacrolix/generics v0.0.2-0.20240227122613-f95486179cab
 	github.com/anacrolix/torrent v1.56.1
 	github.com/dchest/uniuri v1.2.0
 	github.com/docker/go-units v0.5.0
@@ -38,11 +37,13 @@ require (
 	github.com/zeebo/bencode v1.0.0
 	go.uber.org/atomic v1.11.0
 	go.uber.org/automaxprocs v1.5.3
+	go4.org/mem v0.0.0-20240501181205-ae6ca9944745
 	golang.org/x/sync v0.7.0
 	golang.org/x/sys v0.21.0
 )
 
 require (
+	github.com/anacrolix/generics v0.0.2-0.20240227122613-f95486179cab // indirect
 	github.com/anacrolix/missinggo v1.3.0 // indirect
 	github.com/anacrolix/missinggo/perf v1.0.0 // indirect
 	github.com/anacrolix/missinggo/v2 v2.7.3 // indirect

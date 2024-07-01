@@ -12,7 +12,7 @@ import (
 
 	"tyr/internal/meta"
 	"tyr/internal/pkg/fallocate"
-	"tyr/internal/pkg/gctx"
+	"tyr/internal/pkg/gfs"
 )
 
 type existingFile struct {
@@ -80,7 +80,7 @@ func (d *Download) initCheck() error {
 			}
 
 			//_, err = d.ioDown.IO(io.ReadFull(f, buf.B[size:size+chunk.length]))
-			_, err = d.ioDown.IO64(io.CopyN(sum, gctx.NewReader(d.ctx, f), chunk.length))
+			_, err = d.ioDown.IO64(io.CopyN(sum, gfs.NewReader(d.ctx, f), chunk.length))
 			if err != nil {
 				return errgo.Wrap(err, fmt.Sprintf("failed to read file %s", fp))
 			}

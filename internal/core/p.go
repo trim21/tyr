@@ -101,7 +101,7 @@ func newPeer(
 	return p
 }
 
-var ErrPeerSendInvalidData = errors.New("peer send invalid data")
+var ErrPeerSendInvalidData = errors.New("addrPort send invalid data")
 
 type Peer struct {
 	log                       zerolog.Logger
@@ -196,7 +196,7 @@ func (p *Peer) start(skipHandshake bool) {
 	defer p.close()
 
 	if err := proto.SendHandshake(p.Conn, p.d.info.Hash, NewPeerID()); err != nil {
-		p.log.Trace().Err(err).Msg("failed to send handshake to peer")
+		p.log.Trace().Err(err).Msg("failed to send handshake to addrPort")
 		return
 	}
 
@@ -204,17 +204,17 @@ func (p *Peer) start(skipHandshake bool) {
 		h, err := proto.ReadHandshake(p.Conn)
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
-				p.log.Trace().Err(err).Msg("failed to read handshake from peer")
+				p.log.Trace().Err(err).Msg("failed to read handshake from addrPort")
 			}
 			return
 		}
 		if h.InfoHash != p.d.info.Hash {
-			p.log.Trace().Msgf("peer info hash mismatch %x", h.InfoHash)
+			p.log.Trace().Msgf("addrPort info hash mismatch %x", h.InfoHash)
 			return
 		}
 		p.supportFastExtension = h.FastExtension
 		p.log = p.log.With().Str("peer_id", url.QueryEscape(string(h.PeerID[:]))).Logger()
-		p.log.Trace().Msg("connect to peer")
+		p.log.Trace().Msg("connect to addrPort")
 		ua := parsePeerID(h.PeerID)
 		p.UserAgent.Store(&ua)
 	}

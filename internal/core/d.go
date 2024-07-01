@@ -18,13 +18,14 @@ import (
 	"github.com/puzpuzpuz/xsync/v3"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"github.com/valyala/bytebufferpool"
 	"go.uber.org/atomic"
 
 	"tyr/internal/meta"
 	"tyr/internal/pkg/bm"
+	"tyr/internal/pkg/bufpool"
 	"tyr/internal/pkg/flowrate"
 	"tyr/internal/pkg/global"
+	"tyr/internal/pkg/heap"
 	"tyr/internal/proto"
 )
 
@@ -55,7 +56,7 @@ type Download struct {
 	connectionHistory *xsync.MapOf[netip.AddrPort, connHistory]
 	bm                *bm.Bitmap
 	pieceData         map[uint32][]*proto.ChunkResponse
-	peers             *peersHeap
+	peers             *heap.Heap[peerWithPriority]
 	fileOpenMutex     *sync.Cond
 	fileOpenCache     map[int]*fileOpenCache
 	basePath          string
@@ -80,7 +81,7 @@ type Download struct {
 	announcePending   atomic.Bool
 	pdMutex           sync.RWMutex
 	m                 sync.RWMutex
-	peersMutex        sync.RWMutex
+	peersMutex        sync.Mutex
 	connMutex         sync.RWMutex
 	peerID            PeerID
 	state             State
@@ -135,12 +136,7 @@ func (c *Client) NewDownload(m *metainfo.MetaInfo, info meta.Info, basePath stri
 		conn:              xsync.NewMapOf[netip.AddrPort, *Peer](),
 		connectionHistory: xsync.NewMapOf[netip.AddrPort, connHistory](),
 
-		peers: &peersHeap{
-			{
-				peer:     netip.MustParseAddrPort("192.168.1.3:50025"),
-				priority: math.MaxUint32,
-			},
-		},
+		peers: heap.New[peerWithPriority](),
 
 		// will use about 1mb per torrent, can be optimized later
 		pieceInfo: buildPieceInfos(info),
@@ -157,10 +153,16 @@ func (c *Client) NewDownload(m *metainfo.MetaInfo, info meta.Info, basePath stri
 		fileOpenCache: make(map[int]*fileOpenCache),
 	}
 
-	//if global.Dev {
-	//	piece := lo.Must(lo.Last(d.pieceChunks))
-	//	assert.LessOrEqual(piece[len(piece)-1].Length, uint32(defaultBlockSize))
-	//}
+	if global.Dev {
+		d.peersMutex.Lock()
+		d.peers.Push(peerWithPriority{
+			addrPort: netip.MustParseAddrPort("192.168.1.3:50025"),
+			priority: math.MaxUint32,
+		})
+		d.peersMutex.Unlock()
+		//	piece := lo.Must(lo.Last(d.pieceChunks))
+		//	assert.LessOrEqual(piece[len(piece)-1].Length, uint32(defaultBlockSize))
+	}
 
 	d.seq.Store(true)
 	d.cond = sync.NewCond(&d.m)
@@ -178,8 +180,8 @@ func (c *Client) NewDownload(m *metainfo.MetaInfo, info meta.Info, basePath stri
 }
 
 func (d *Download) Display() string {
-	buf := bytebufferpool.Get()
-	defer bytebufferpool.Put(buf)
+	buf := bufpool.Get()
+	defer bufpool.Put(buf)
 
 	d.m.RLock()
 	defer d.m.RUnlock()
@@ -211,14 +213,14 @@ func (d *Download) Display() string {
 		}
 	}
 
-	_, _ = fmt.Fprintf(buf, "%-11s | %s | %5.1f%% | %8s | %8s | %10s ↓ | %6s | %d",
+	_, _ = fmt.Fprintf(buf, "%11s | %s | %6.1f%% | %8s | %8s | %10s ↓ | %5s | %d",
 		d.state,
 		d.info.Hash,
 		float64(completed*1000/d.info.TotalLength)/10,
 		humanize.IBytes(uint64(d.info.TotalLength)),
 		humanize.IBytes(uint64(left)),
 		rate.RateString(),
-		eta,
+		eta.String(),
 		d.conn.Size(),
 	)
 

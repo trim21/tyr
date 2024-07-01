@@ -17,7 +17,7 @@ func maskV4(s [4]byte, size int) [4]byte {
 	return masked
 }
 
-func PriorityBytes4(a, b netip.AddrPort) []byte {
+func priorityBytes4(a, b netip.AddrPort) []byte {
 	if a.Addr() == b.Addr() {
 		return portBytes(a.Port(), b.Port())
 	}
@@ -48,7 +48,7 @@ func PriorityBytes4(a, b netip.AddrPort) []byte {
 }
 
 func Priority4(client, peer netip.AddrPort) uint32 {
-	bs := PriorityBytes4(client, peer)
+	bs := priorityBytes4(client, peer)
 
 	return crc32c.Sum(bs)
 }

@@ -6,3 +6,4 @@ tmp/
 *.pprof
 node_modules/
 env.txt
+coverage.txt

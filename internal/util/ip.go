@@ -3,10 +3,44 @@ package util
 import (
 	"fmt"
 	"net"
+	"net/netip"
 
 	"github.com/samber/lo"
 	"github.com/trim21/errgo"
 )
+
+func GetIpAddress() (*netip.Addr, *netip.Addr, error) {
+	addrs, err := GetLocalIpaddress(nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var v4 *netip.Addr
+	var v6 *netip.Addr
+
+	for _, ips := range addrs {
+		for _, ip := range ips {
+			a, ok := netip.AddrFromSlice(ip)
+			if !ok {
+				continue
+			}
+
+			if a.Is4() {
+				v4 = &a
+			}
+
+			if a.Is6() {
+				v6 = &a
+			}
+
+			if v4 != nil && v6 != nil {
+				return v4, v6, nil
+			}
+		}
+	}
+
+	return v4, v6, nil
+}
 
 func GetLocalIpaddress(enabledIf []string) (map[string][]net.IP, error) {
 	ifces, err := net.Interfaces()
@@ -18,7 +52,11 @@ func GetLocalIpaddress(enabledIf []string) (map[string][]net.IP, error) {
 
 	// handle err
 	for _, i := range ifces {
-		if i.Flags&net.FlagLoopback == net.FlagLoopback {
+		if i.Flags&net.FlagLoopback != 0 || i.Flags&net.FlagPointToPoint != 0 {
+			continue
+		}
+
+		if i.Flags&(net.FlagBroadcast|net.FlagMulticast) == 0 {
 			continue
 		}
 
@@ -36,7 +74,7 @@ func GetLocalIpaddress(enabledIf []string) (map[string][]net.IP, error) {
 		for _, addr := range addrs {
 			var ip net.IP
 			switch v := addr.(type) {
-			case *net.IPNet:
+			case *net.IPNet: // ipv6 with prefix is a network
 				ip = v.IP
 			case *net.IPAddr:
 				ip = v.IP
@@ -44,7 +82,7 @@ func GetLocalIpaddress(enabledIf []string) (map[string][]net.IP, error) {
 				continue
 			}
 
-			if IsPrivateIP(ip) {
+			if isPrivateIP(ip) {
 				continue
 			}
 
@@ -76,8 +114,8 @@ func init() {
 	}
 }
 
-func IsPrivateIP(ip net.IP) bool {
-	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+func isPrivateIP(ip net.IP) bool {
+	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsPrivate() {
 		return true
 	}
 
@@ -86,5 +124,6 @@ func IsPrivateIP(ip net.IP) bool {
 			return true
 		}
 	}
+
 	return false
 }

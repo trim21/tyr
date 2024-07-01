@@ -1,7 +1,6 @@
 package proto
 
 import (
-	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -10,6 +9,7 @@ import (
 	"github.com/negrel/assert"
 
 	"tyr/internal/meta"
+	"tyr/internal/pkg/ro"
 )
 
 func genReversedFlag(index int, value byte) uint64 {
@@ -18,7 +18,7 @@ func genReversedFlag(index int, value byte) uint64 {
 	return binary.BigEndian.Uint64(b[:])
 }
 
-var handshakePstrV1 = []byte("\x13BitTorrent protocol")
+var handshakePstrV1 = ro.S("\x13BitTorrent protocol")
 
 // https://www.bittorrent.org/beps/bep_0006.html
 // reserved_byte[7] & 0x04
@@ -39,7 +39,7 @@ var handshakeBytes = binary.BigEndian.AppendUint64(nil, exchangeExtensionEnabled
 //
 // Total length = payload length = 49 + len(pstr) = 68 bytes (for BitTorrent v1)
 func SendHandshake(conn io.Writer, infoHash, peerID [20]byte) error {
-	_, err := conn.Write(handshakePstrV1)
+	_, err := handshakePstrV1.WriteTo(conn)
 	if err != nil {
 		return err
 	}
@@ -80,7 +80,7 @@ func ReadHandshake(conn io.Reader) (Handshake, error) {
 
 	assert.Equal(20, n)
 
-	if !bytes.Equal(b, handshakePstrV1) {
+	if !handshakePstrV1.EqualBytes(b) {
 		return Handshake{}, ErrHandshakeMismatch
 	}
 

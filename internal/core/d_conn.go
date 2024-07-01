@@ -7,9 +7,6 @@ import (
 	"net/netip"
 	"time"
 
-	"github.com/anacrolix/generics/heap"
-	"github.com/samber/lo"
-
 	"tyr/internal/mse"
 	"tyr/internal/pkg/global"
 	"tyr/internal/pkg/global/tasks"
@@ -25,15 +22,14 @@ func (d *Download) AddConn(addr netip.AddrPort, conn net.Conn, h proto.Handshake
 }
 
 func (d *Download) connectToPeers() {
-	d.peersMutex.RLock()
-	peers := lo.ToPtr(*d.peers)
-	d.peersMutex.RUnlock()
+	d.peersMutex.Lock()
+	defer d.peersMutex.Unlock()
 
-	for i := 0; i < peers.Len(); i++ {
-		pp := heap.Pop[peerWithPriority](peers)
-		addr := pp.peer
+	for d.peers.Len() > 0 {
+		// try connecting first
+		pp := d.peers.Peek()
 
-		if item := d.c.ch.Get(addr); item != nil {
+		if item := d.c.ch.Get(pp.addrPort); item != nil {
 			ch := item.Value()
 			if ch.timeout {
 				continue
@@ -43,26 +39,29 @@ func (d *Download) connectToPeers() {
 			}
 		}
 
-		if _, ok := d.conn.Load(addr); ok {
+		if _, ok := d.conn.Load(pp.addrPort); ok {
+			d.peers.Pop()
 			continue
 		}
 
 		if !d.c.sem.TryAcquire(1) {
 			break
 		}
-
 		d.c.connectionCount.Add(1)
+
+		// actually remove it
+		d.peers.Pop()
 
 		tasks.Submit(func() {
 			ch := connHistory{lastTry: time.Now()}
 			defer func(h connHistory) {
-				d.c.ch.Set(addr, h, time.Hour)
+				d.c.ch.Set(pp.addrPort, h, time.Hour)
 			}(ch)
 
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 			defer cancel()
 
-			conn, err := global.Dialer.DialContext(ctx, "tcp", addr.String())
+			conn, err := global.Dialer.DialContext(ctx, "tcp", pp.addrPort.String())
 			if err != nil {
 				if errors.Is(err, context.DeadlineExceeded) {
 					ch.timeout = true
@@ -75,7 +74,7 @@ func (d *Download) connectToPeers() {
 			}
 
 			if d.c.mseDisabled {
-				d.conn.Store(addr, NewOutgoingPeer(conn, d, addr))
+				d.conn.Store(pp.addrPort, NewOutgoingPeer(conn, d, pp.addrPort))
 				return
 			}
 
@@ -87,7 +86,7 @@ func (d *Download) connectToPeers() {
 				return
 			}
 
-			d.conn.Store(addr, NewOutgoingPeer(rwc, d, addr))
+			d.conn.Store(pp.addrPort, NewOutgoingPeer(rwc, d, pp.addrPort))
 		})
 	}
 }

@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anacrolix/generics/heap"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/go-resty/resty/v2"
 	"github.com/rs/zerolog/log"
@@ -20,9 +19,7 @@ import (
 	"github.com/valyala/bytebufferpool"
 	"github.com/zeebo/bencode"
 
-	"tyr/internal/bep40"
 	"tyr/internal/pkg/null"
-	"tyr/internal/pkg/unsafe"
 )
 
 const EventStarted = "started"
@@ -53,10 +50,9 @@ func (d *Download) asyncAnnounce(event string) {
 		if len(r.Peers) != 0 {
 			d.peersMutex.Lock()
 			for _, peer := range r.Peers {
-				// TODO: bep40, maybe
-				heap.Push[peerWithPriority](d.peers, peerWithPriority{
-					peer:     peer,
-					priority: bep40.SimplePriority(d.c.randKey, unsafe.Bytes(peer.String())),
+				d.peers.Push(peerWithPriority{
+					addrPort: peer,
+					priority: d.c.PeerPriority(peer),
 				})
 			}
 			d.peersMutex.Unlock()
@@ -320,31 +316,10 @@ func (d *Download) ScrapeUrl() string {
 }
 
 type peerWithPriority struct {
-	peer     netip.AddrPort
+	addrPort netip.AddrPort
 	priority uint32
 }
 
-type peersHeap []peerWithPriority
-
-func (h peersHeap) Len() int {
-	return len(h)
+func (p peerWithPriority) Less(o peerWithPriority) bool {
+	return p.priority < o.priority
 }
-
-func (h peersHeap) Less(i, j int) bool {
-	return h[i].priority < h[j].priority
-}
-
-func (h *peersHeap) Swap(i, j int) {
-	(*h)[i], (*h)[j] = (*h)[j], (*h)[i]
-}
-
-func (h *peersHeap) Push(v peerWithPriority) {
-	*h = append(*h, v)
-}
-
-func (h *peersHeap) Pop() (v peerWithPriority) {
-	*h, v = (*h)[:h.Len()-1], (*h)[h.Len()-1]
-	return v
-}
-
-var _ heap.Interface[peerWithPriority] = (*peersHeap)(nil)
