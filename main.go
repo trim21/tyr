@@ -50,7 +50,7 @@ func main() {
 	// this avoids 'pflag: help requested' error when calling for help message.
 	if slices.Contains(os.Args[1:], "--help") || slices.Contains(os.Args[1:], "-h") {
 		pflag.Usage()
-		_, _ = fmt.Fprintln(os.Stderr, "\nNote: extra options will override config file, but won't change config file.")
+		_, _ = fmt.Fprintln(os.Stderr, "\n\nNote: extra options will override config file, but won't change config file.")
 		return
 	}
 
