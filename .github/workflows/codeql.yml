@@ -9,7 +9,7 @@ on:
     - cron: "43 13 * * 1"
 
 jobs:
-  vol-check:
+  vulncheck:
     runs-on: "ubuntu-latest"
     steps:
       - uses: actions/checkout@v4

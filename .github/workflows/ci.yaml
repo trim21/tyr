@@ -61,3 +61,5 @@ jobs:
 
       - run: go build '-tags=${{ matrix.tag }}' -o tmp/try.exe
       - run: ./tmp/try.exe --help
+
+      - run: go clean -cache
