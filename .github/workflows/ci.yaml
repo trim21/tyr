@@ -36,6 +36,9 @@ jobs:
             go.sum
             tools/go.sum
 
+      - run: du -h $(go env GOMODCACHE)
+        shell: bash
+
       - name: Install Task
         uses: arduino/setup-task@v2
         with:
