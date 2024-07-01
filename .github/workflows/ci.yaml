@@ -16,6 +16,7 @@ jobs:
   go-mod-tidy:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
@@ -53,9 +54,6 @@ jobs:
             env.txt
             go.sum
             tools/go.sum
-
-      - run: du -h $(go env GOMODCACHE) | sort -h
-        shell: bash
 
       - name: Install Task
         uses: arduino/setup-task@v2
