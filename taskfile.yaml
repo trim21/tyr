@@ -4,9 +4,17 @@ tasks:
   init:
     dir: tools
     cmds:
-      - go install github.com/dkorunic/betteralign/cmd/betteralign@latest
       - go install gotest.tools/gotestsum@latest
+      - go install github.com/dkorunic/betteralign/cmd/betteralign@latest
       - go install golang.org/x/vuln/cmd/govulncheck@latest
+
+  lint:
+    - betteralign -apply ./...
+    - golangci-lint run
+
+  gen: go generate ./...
+
+  test: gotestsum --format-hide-empty-pkg -- -count=1 -coverprofile=coverage.txt -covermode=atomic -tags assert ./...
 
   mod-tidy:
     cmds:
@@ -14,17 +22,8 @@ tasks:
         dir: tools
       - go mod tidy
 
-  test: gotestsum --format-hide-empty-pkg -- -count=1 -coverprofile=coverage.txt -covermode=atomic -tags assert ./...
-
-  build:
-    generates:
-      - dist/tmp/tmp.exe
-    env:
-      GORACE: halt_on_error=1
-    sources:
-      - go.mod
-      - go.sum
-      - "**/*.go"
+  binary:
+    internal: true
     vars:
       REF:
         sh: git describe --dirty=' (dirty)' --first-parent --all
@@ -34,28 +33,34 @@ tasks:
       - >-
         go build
         -ldflags="-X 'tyr/internal/version.Ref={{ .REF }}' -X 'tyr/internal/version.BuildDate={{ dateInZone "2006-01-02T15:04:05Z07:00" (now) "UTC" }}'" 
-        -buildvcs=true -trimpath -tags release -o dist/tyr.exe
+        -buildvcs=true {{ .EXTRA_FLAGS }} -trimpath -tags {{ .TAG }} -o {{ .OUT_PATH }}
+
+  build:
+    generates:
+      - dist/tyr.exe
+    sources:
+      - go.mod
+      - go.sum
+      - "**/*.go"
+    cmds:
+      - task: binary
+        vars:
+          TAG: release
+          OUT_PATH: dist/tyr.exe
 
   build:dev:
     generates:
       - dist/tmp/tmp.exe
-    env:
-      GORACE: halt_on_error=1
-      GOAMD64: v3
     sources:
       - go.mod
       - go.sum
       - "**/*.go"
-    vars:
-      REF:
-        sh: git describe --dirty=' (dirty)' --first-parent --all
-      SHA:
-        sh: git rev-parse --short HEAD
     cmds:
-      - >-
-        go build
-        -ldflags="-X 'tyr/internal/version.Ref={{ .REF }}' -X 'tyr/internal/version.BuildDate={{ dateInZone "2006-01-02T15:04:05Z07:00" (now) "UTC" }}'" 
-        -buildvcs=true -trimpath -tags assert -o dist/tmp/tmp.exe
+      - task: binary
+        vars:
+          TAG: release
+          OUT_PATH: dist/tyr.exe
+          EXTRA_FLAGS: -race
       - cp dist/tmp/tmp.exe dist/tmp/server.exe
 
   dev:
@@ -73,19 +78,13 @@ tasks:
       - .env
     cmds:
       - dist/tmp/server.exe --debug --web 127.0.0.1:8002 --config-file ./config.toml
-  #
-  #  dev:release:
-  #    watch: true
-  #    deps:
-  #      - build
-  #    cmds:
-  #      - cp dist/tyr.exe dist/server.exe
-  #      - dist/server.exe --web 127.0.0.1:8002 --config-file ./config.toml
-  lint:
-    - betteralign -apply ./...
-    - golangci-lint run
 
-  gen: go generate ./...
+  dev:release:
+    deps:
+      - build
+    cmds:
+      - cp dist/tyr.exe dist/tmp/release.exe
+      - dist/tmp/release.exe --web 127.0.0.1:8002 --config-file ./config.toml
 
   pprof:
     cmds:
@@ -98,7 +97,3 @@ tasks:
   pprof:heap:
     cmds:
       - go tool pprof -http=:8001 http://127.0.0.1:8002/debug/pprof/heap
-
-  trace:
-    cmds:
-      - curl http://127.0.0.1:8002/debug/pprof/trace?seconds=5 > trace.out
