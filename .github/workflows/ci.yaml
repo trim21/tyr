@@ -12,7 +12,25 @@ env:
   GOTOOLCHAIN: local
 
 jobs:
-  build:
+  # check go mod clean
+  go-mod-tidy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+          cache-dependency-path: |
+            go.sum
+            tools/go.sum
+
+      - run: go mod tidy
+        working-directory: tools
+
+      # check go mod clean
+      - run: go mod tidy
+      - run: git diff --exit-code
+
+  test:
     name: "${{ matrix.os }} tag=${{ matrix.tag }}"
     runs-on: "${{ matrix.os }}"
     strategy:
@@ -26,7 +44,7 @@ jobs:
 
       - shell: bash
         # so we can cache based on cgo and build tags
-        run: echo "tag=${{ matrix.tag }}" > env.txt
+        run: echo "v=2;tag=${{ matrix.tag }}" > env.txt
 
       - uses: actions/setup-go@v5
         with:
@@ -44,10 +62,6 @@ jobs:
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-
-      # check go mod clean
-      - run: go mod tidy
-      - run: git diff --exit-code
 
       - run: go install gotest.tools/gotestsum@latest
         working-directory: tools
