@@ -14,10 +14,10 @@ env:
 jobs:
   build:
     name: "${{ matrix.os }} tag=${{ matrix.tag }}"
-    runs-on: "${{ matrix.os }}-latest"
+    runs-on: "${{ matrix.os }}"
     strategy:
       matrix:
-        os: [ubuntu, windows, macos]
+        os: [ubuntu-latest, windows-latest]
         tag: [assert, release]
     env:
       GORACE: "halt_on_error=1"
