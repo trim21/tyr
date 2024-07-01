@@ -7,6 +7,7 @@ toolchain go1.22.4
 require (
 	github.com/dkorunic/betteralign v0.4.4
 	golang.org/x/tools v0.22.0
+	golang.org/x/vuln v1.1.2
 	gotest.tools/gotestsum v1.12.0
 )
 
@@ -39,6 +40,7 @@ require (
 	golang.org/x/mod v0.18.0 // indirect
 	golang.org/x/sync v0.7.0 // indirect
 	golang.org/x/sys v0.21.0 // indirect
+	golang.org/x/telemetry v0.0.0-20240522233618-39ace7a40ae7 // indirect
 	golang.org/x/term v0.21.0 // indirect
 	golang.org/x/text v0.16.0 // indirect
 	google.golang.org/protobuf v1.34.0 // indirect

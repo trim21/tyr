@@ -106,7 +106,7 @@ func main() {
 	webToken := viper.GetString("web-secret-token")
 
 	if webToken == "" {
-		webToken = random.Base64Str(32)
+		webToken = random.UrlSafeStr(32)
 		_, _ = fmt.Fprintln(os.Stderr, "no web secret token, generating new token:", strconv.Quote(webToken))
 	}
 

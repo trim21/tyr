@@ -25,7 +25,7 @@ import (
 func TestSecureRandomString(t *testing.T) {
 	t.Parallel()
 	for i := 0; i < 300; i++ {
-		s := random.Base64Str(64)
+		s := random.UrlSafeStr(64)
 		require.Equal(t, 64, len(s))
 	}
 }
@@ -39,7 +39,7 @@ func TestBias(t *testing.T) {
 	var count int64
 
 	for i := 0; i < loop; i++ {
-		s := random.Base64Str(slen)
+		s := random.UrlSafeStr(slen)
 		require.Equal(t, slen, len(s))
 		for _, b := range s {
 			counts[b]++
