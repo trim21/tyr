@@ -13,7 +13,7 @@ env:
 
 jobs:
   # check go mod clean
-  go-mod-tidy:
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -32,6 +32,10 @@ jobs:
       # check go mod clean
       - run: go mod tidy
       - run: git diff --exit-code
+      - run: go install golang.org/x/vuln/cmd/govulncheck@latest
+        working-directory: tools
+
+      - run: govulncheck -tags release ./...
 
   test:
     runs-on: "${{ matrix.os }}"
