@@ -28,7 +28,7 @@ func (c *Client) Start() error {
 			for {
 				time.Sleep(time.Second * 5)
 				fmt.Printf("\n\ngoroutine count %v connection count %v\n", runtime.NumGoroutine(), c.connectionCount.Load())
-				fmt.Printf(" %10s | %20s%-20s | percent |    total |     done |      speed   |   ETA | conns\n", "state", "", "info hash")
+				fmt.Printf(" %10s | %20s%-20s | percent |    total |     left |      speed   |   ETA | conns\n", "state", "", "info hash")
 				c.m.RLock()
 				for _, d := range c.downloads {
 					fmt.Println(d.Display())

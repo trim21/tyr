@@ -59,7 +59,6 @@ type Download struct {
 	peers             *heap.Heap[peerWithPriority]
 	fileOpenMutex     *sync.Cond
 	fileOpenCache     map[int]*fileOpenCache
-	m                 sync.RWMutex
 	basePath          string
 	key               string
 	downloadDir       string
@@ -80,6 +79,7 @@ type Download struct {
 	lazyInitialized   atomic.Bool
 	seq               atomic.Bool
 	announcePending   atomic.Bool
+	m                 sync.RWMutex
 	pdMutex           sync.RWMutex
 	connMutex         sync.RWMutex
 	peersMutex        sync.Mutex

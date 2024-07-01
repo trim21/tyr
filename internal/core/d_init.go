@@ -3,6 +3,7 @@ package core
 import (
 	"crypto/sha1"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"tyr/internal/meta"
 	"tyr/internal/pkg/fallocate"
 	"tyr/internal/pkg/gfs"
+	"tyr/internal/pkg/global"
 )
 
 type existingFile struct {
@@ -48,16 +50,15 @@ func (d *Download) initCheck() error {
 
 	d.log.Debug().Msg("start checking")
 
-	//buf := mempool.Get()
-	//defer mempool.Put(buf)
-	//
-	//if cap(buf.B) < int(d.info.PieceLength) {
-	//	buf.B = make([]byte, d.info.PieceLength)
-	//}
-
-	bucket := ratelimit.NewBucketWithQuantum(time.Second/10, units.MiB*50, units.MiB*50)
-
 	sum := sha1.New()
+
+	var w io.Writer = sum
+
+	if global.Dev {
+		bucket := ratelimit.NewBucketWithQuantum(time.Second/10, units.MiB*50, units.MiB*50)
+		w = ratelimit.Writer(sum, bucket)
+	}
+
 	for _, pieceIndex := range h {
 		piece := d.pieceInfo[pieceIndex]
 		for _, chunk := range piece.fileChunks {
@@ -72,9 +73,7 @@ func (d *Download) initCheck() error {
 				return errgo.Wrap(err, fmt.Sprintf("failed to open file %q", filepath.Join(d.basePath, d.info.Files[chunk.fileIndex].Path)))
 			}
 
-			bucket.Wait(chunk.length)
-
-			_, err = d.ioDown.IO64(gfs.CopyReaderAt(sum, f.File, chunk.offsetOfFile, chunk.length))
+			_, err = d.ioDown.IO64(gfs.CopyReaderAt(w, f.File, chunk.offsetOfFile, chunk.length))
 			if err != nil {
 				return errgo.Wrap(err, fmt.Sprintf("failed to read file %s", f.File.Name()))
 			}
