@@ -36,7 +36,7 @@ jobs:
             go.sum
             tools/go.sum
 
-      - run: du -h $(go env GOMODCACHE)
+      - run: du -h $(go env GOMODCACHE) | sort -h
         shell: bash
 
       - name: Install Task
