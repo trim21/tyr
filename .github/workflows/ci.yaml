@@ -32,7 +32,6 @@ jobs:
       - run: git diff --exit-code
 
   test:
-    name: "${{ matrix.os }} tag=${{ matrix.tag }}"
     runs-on: "${{ matrix.os }}"
     strategy:
       matrix:
